@@ -12,8 +12,29 @@ import piece4 from "@/assets/landing/piece-4.jpg";
 import piece6 from "@/assets/landing/piece-6.jpg";
 import piece7 from "@/assets/landing/piece-7.jpg";
 
-// Placeholder until payments are in place.
-const PRICE = "$9";
+// Priced per wall, since most people plan one wall at a time. Prices are placeholders until payments are in place.
+const plans = [
+  {
+    name: "One wall",
+    price: "$9",
+    featured: true,
+    items: [
+      "Photos of as much art as you like",
+      "Unlimited layouts",
+      "Sizes in centimetres",
+      "Save and compare layouts",
+      "Full-resolution download",
+      "Hanging measurements for every nail",
+    ],
+  },
+  {
+    name: "Three walls",
+    price: "$19",
+    tag: "Moving in?",
+    featured: false,
+    items: ["Everything in One wall, for three walls", "Use them whenever you like", "Move art between walls"],
+  },
+];
 
 function Cta({ light = false, className = "" }: { light?: boolean; className?: string }) {
   return (
@@ -75,6 +96,14 @@ const features = [
 
 const faqs = [
   {
+    q: "What counts as a wall?",
+    a: "The wall you plan on. Add as many photos of art as you like and try as many layouts as you want on it.",
+  },
+  {
+    q: "Is it a subscription?",
+    a: "No. You pay once per wall.",
+  },
+  {
     q: "Do my frames need to be on the wall first?",
     a: "No. Lean them against the wall, stand them on the sofa or lay them on the floor. We cut them out wherever they are.",
   },
@@ -121,7 +150,7 @@ export default function Landing() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-5 gap-y-3">
               <Cta />
-              <span className="text-sm text-stone-500">Free to try · No account needed</span>
+              <span className="text-sm text-stone-500">{plans[0].price} per wall · No subscription</span>
             </div>
           </div>
           <BeforeAfter before={before} after={after} />
@@ -180,48 +209,46 @@ export default function Landing() {
         <section id="pricing" className="border-y border-stone-200 bg-white">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <div className="text-center">
-              <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Try it free. Pay when it&apos;s right.</h2>
-              <p className="mt-4 text-lg text-stone-600">One price per wall. No subscription.</p>
+              <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Pay once per wall</h2>
+              <p className="mt-4 text-lg text-stone-600">No subscription. Nothing to cancel.</p>
             </div>
             <div className="mx-auto mt-14 grid max-w-4xl gap-6 md:grid-cols-2">
-              <div className="rounded-2xl border border-stone-200 p-8">
-                <h3 className="text-lg font-semibold">Try it</h3>
-                <p className="mt-2 font-serif text-5xl">Free</p>
-                <ul className="mt-8 space-y-3 text-stone-700">
-                  {["Upload as many photos as you like", "Unlimited layouts", "Sizes in centimetres"].map((item) => (
-                    <PlanItem key={item}>{item}</PlanItem>
-                  ))}
-                </ul>
-                <Link
-                  href="/plan"
-                  className="mt-10 block rounded-full border border-stone-300 py-3 text-center font-medium hover:bg-stone-50"
+              {plans.map((plan) => (
+                <div
+                  key={plan.name}
+                  className={`relative flex flex-col rounded-2xl p-8 ${
+                    plan.featured ? "bg-stone-900 text-white" : "border border-stone-200"
+                  }`}
                 >
-                  Start free
-                </Link>
-              </div>
-              <div className="rounded-2xl bg-stone-900 p-8 text-white">
-                <h3 className="text-lg font-semibold">Your wall</h3>
-                <p className="mt-2 font-serif text-5xl">
-                  {PRICE}
-                  <span className="ml-2 font-sans text-base text-stone-400">one-time</span>
-                </p>
-                <ul className="mt-8 space-y-3 text-stone-200">
-                  {[
-                    "Everything in Try it",
-                    "Save and compare layouts",
-                    "Full-resolution download",
-                    "Hanging measurements for every nail",
-                  ].map((item) => (
-                    <PlanItem key={item}>{item}</PlanItem>
-                  ))}
-                </ul>
-                <Link
-                  href="/plan"
-                  className="mt-10 block rounded-full bg-white py-3 text-center font-medium text-stone-900 hover:bg-stone-100"
-                >
-                  Plan your wall
-                </Link>
-              </div>
+                  {plan.tag && (
+                    <span className="absolute right-6 top-6 rounded-full bg-[#c2683f]/10 px-3 py-1 text-xs font-medium text-[#c2683f]">
+                      {plan.tag}
+                    </span>
+                  )}
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  <p className="mt-2 font-serif text-5xl">
+                    {plan.price}
+                    <span className={`ml-2 font-sans text-base ${plan.featured ? "text-stone-400" : "text-stone-500"}`}>
+                      one-time
+                    </span>
+                  </p>
+                  <ul className={`mt-8 mb-10 space-y-3 ${plan.featured ? "text-stone-200" : "text-stone-700"}`}>
+                    {plan.items.map((item) => (
+                      <PlanItem key={item}>{item}</PlanItem>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/plan"
+                    className={`mt-auto block rounded-full py-3 text-center font-medium ${
+                      plan.featured
+                        ? "bg-white text-stone-900 hover:bg-stone-100"
+                        : "border border-stone-300 hover:bg-stone-50"
+                    }`}
+                  >
+                    Plan your wall
+                  </Link>
+                </div>
+              ))}
             </div>
           </div>
         </section>
