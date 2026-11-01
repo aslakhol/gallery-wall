@@ -266,7 +266,7 @@ export function Planner() {
     <main className="flex h-dvh flex-col bg-stone-100">
       {uploadInput}
       <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2">
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="mr-auto flex gap-2 overflow-x-auto">
           {photos.map((photo) => {
             const wall = walls.find((w) => w.photo.id === photo.id);
             const pending = !photo.failed && (!photo.analysis || (wall && !photo.cleanUrl));
@@ -288,24 +288,9 @@ export function Planner() {
             );
           })}
         </div>
-        <button
-          className="ml-auto shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-          onClick={() => fileInput.current?.click()}
-        >
-          Add photos
-        </button>
-        <button
-          aria-pressed={showMeasurements}
-          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-40 ${
-            showMeasurements ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700" : "border-stone-300 hover:bg-stone-50"
-          }`}
-          disabled={!activeWall}
-          onClick={() => setShowMeasurements((on) => !on)}
-        >
-          Measure
-        </button>
         {activeWall?.photo.cleanUrl && savedLayouts.length > 0 && (
-          <div className="flex max-w-[40vw] gap-2 overflow-x-auto p-1">
+          // Newer layouts extend to the left, away from the buttons.
+          <div className="flex max-w-[40vw] flex-row-reverse gap-2 overflow-x-auto p-1">
             {savedLayouts.map((entry, i) => (
               <div key={entry.id} className="group relative shrink-0">
                 <button
@@ -338,6 +323,22 @@ export function Planner() {
           onClick={saveLayout}
         >
           Save
+        </button>
+        <button
+          className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
+          onClick={() => fileInput.current?.click()}
+        >
+          Add photos
+        </button>
+        <button
+          aria-pressed={showMeasurements}
+          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-40 ${
+            showMeasurements ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700" : "border-stone-300 hover:bg-stone-50"
+          }`}
+          disabled={!activeWall}
+          onClick={() => setShowMeasurements((on) => !on)}
+        >
+          Measure
         </button>
         <button
           className="shrink-0 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
