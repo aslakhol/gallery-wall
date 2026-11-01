@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
-import { boxToPixels, toPixels, unwarp } from "@/lib/geometry";
+import { boxToPixels, toPixels, unwarp, type Point } from "@/lib/geometry";
 import { JOB_HEADER } from "@/lib/job";
 import { randomLayout, type WallSpace } from "@/lib/layout";
 import { WallStage, type StageItem } from "./wall-stage";
@@ -70,8 +70,10 @@ const viaApi =
   });
 
 // A photo that has already been processed, for trying the planner without uploading anything.
-// `hidden` lists the labels of art that starts in the tray, off the wall.
-export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis; hidden: string[] };
+// `layout` is where it starts: the top-left corner of each piece by label, in the analysis' 0–1000 coordinates.
+// Art left out starts in the tray, off the wall.
+type StartLayout = Record<string, Point>;
+export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis; layout: StartLayout };
 
 function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
   const surface = boxToPixels(wall.surface, width, height);
@@ -136,7 +138,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   const updatePhoto = (id: string, patch: Partial<Photo>) =>
     setPhotos((all) => all.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
 
-  async function addPhoto(file: Blob, process: Processor, hiddenLabels: string[] = []) {
+  async function addPhoto(file: Blob, process: Processor, start?: StartLayout) {
     const id = crypto.randomUUID();
     const { blob, width, height, pixels } = await preparePhoto(file);
     setPhotos((all) => [...all, { id, url: URL.createObjectURL(blob), width, height }]);
@@ -156,10 +158,15 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
           label: art.label,
           ...unwarp(pixels, quad),
           longestCm: Math.max(art.widthCm, art.heightCm),
-          hidden: hiddenLabels.includes(art.label),
+          hidden: !!start && !(art.label in start),
         };
       });
       setPieces((all) => [...all, ...found]);
+      if (start) {
+        const placed = found.filter((piece) => piece.label in start);
+        const layout = placed.map((piece) => [piece.id, { ...toPixels(start[piece.label], width, height), scale: 1 }]);
+        setLayouts((all) => ({ ...all, [id]: Object.fromEntries(layout) }));
+      }
     });
 
     const clean = processed.cleanUrl.then((cleanUrl) => updatePhoto(id, { cleanUrl }));
@@ -181,7 +188,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
         addPhoto(
           photo,
           () => ({ analysis: Promise.resolve(example.analysis), cleanUrl: Promise.resolve(example.cleanUrl) }),
-          example.hidden,
+          example.layout,
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the example is fixed for the planner's lifetime

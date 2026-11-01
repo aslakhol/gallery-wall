@@ -6,7 +6,13 @@ import room from "./room.jpg";
 export const example: Example = {
   photo: room.src,
   cleanUrl: clean.src,
-  hidden: ["square textile art"],
+  layout: {
+    "landscape watercolor print": { x: 418, y: 241 },
+    "coastal seascape print": { x: 493, y: 235 },
+    "botanical print": { x: 362, y: 405 },
+    "abstract painting": { x: 442, y: 361 },
+    "vintage travel poster": { x: 561, y: 405 },
+  },
   analysis: {
     art: [
       {
