@@ -59,12 +59,12 @@ async function post(path: string, body: Blob, jobId: string) {
 
 function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
   const surface = boxToPixels(wall.surface, width, height);
-  const furniture = wall.furniture && {
-    left: (wall.furniture.left / 1000) * width,
-    right: (wall.furniture.right / 1000) * width,
-    top: (wall.furniture.top / 1000) * height,
+  const hangAbove = {
+    left: (wall.hangAbove.left / 1000) * width,
+    right: (wall.hangAbove.right / 1000) * width,
+    top: (wall.hangAbove.top / 1000) * height,
   };
-  return { surface, furniture, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
+  return { surface, hangAbove, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
 }
 
 // Pieces keep the proportions seen in the photo; the estimated real size only sets how big they are.
@@ -76,7 +76,7 @@ function pieceSize(piece: Piece, wall: Wall, scale: number) {
 }
 
 // Keep an arrangement's proportions when the wall's scale changes: pieces grow or shrink,
-// and their positions scale around the bottom center of the cluster so it keeps its place above the furniture.
+// and their positions scale around the bottom center of the cluster so it keeps its place above the hang-above line.
 function rescaleLayout(layout: Layout, pieces: Piece[], from: Wall, ratio: number): Layout {
   const boxes = pieces.flatMap((piece) => {
     const placement = layout[piece.id];
@@ -296,7 +296,7 @@ export function Planner() {
         </button>
         <button
           aria-pressed={showMeasurements}
-          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-40 ${
             showMeasurements ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700" : "border-stone-300 hover:bg-stone-50"
           }`}
           disabled={!activeWall}

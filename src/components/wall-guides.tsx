@@ -5,7 +5,7 @@ import { trackPointer } from "./track-pointer";
 
 const HANDLE = 18;
 
-// The wall surface and furniture edge the layout works from, with handles to correct them
+// The wall surface and hang-above line the layout works from, with handles to correct them
 // and cm fields to set the scale from a known measurement.
 export function WallGuides({
   wall,
@@ -16,7 +16,7 @@ export function WallGuides({
   zoom: number;
   onChange: (wall: WallSpace) => void;
 }) {
-  const { surface, furniture, pxPerCm } = wall;
+  const { surface, hangAbove, pxPerCm } = wall;
   const px = (n: number) => n / zoom;
 
   const handle = (key: string, x: number, y: number, onMove: (dx: number, dy: number) => void) => (
@@ -67,25 +67,22 @@ export function WallGuides({
         onCommit={setLength(surface.bottom - surface.top)}
       />
       {corners}
-      {furniture && (
-        <>
-          <div
-            className="absolute bg-amber-500"
-            style={{ left: furniture.left, top: furniture.top, width: furniture.right - furniture.left, height: px(4) }}
-          />
-          <CmField
-            x={(furniture.left + furniture.right) / 2}
-            y={furniture.top + px(24)}
-            zoom={zoom}
-            cm={(furniture.right - furniture.left) / pxPerCm}
-            onCommit={setLength(furniture.right - furniture.left)}
-          />
-          {(["left", "right"] as const).map((end) =>
-            handle(`furniture-${end}`, furniture[end], furniture.top, (dx, dy) =>
-              onChange({ ...wall, furniture: { ...furniture, [end]: furniture[end] + dx, top: furniture.top + dy } }),
-            ),
-          )}
-        </>
+      <div
+        className="absolute bg-amber-500"
+        style={{ left: hangAbove.left, top: hangAbove.top, width: hangAbove.right - hangAbove.left, height: px(4) }}
+      />
+      <CmField
+        label="Hang above"
+        x={(hangAbove.left + hangAbove.right) / 2}
+        y={hangAbove.top + px(24)}
+        zoom={zoom}
+        cm={(hangAbove.right - hangAbove.left) / pxPerCm}
+        onCommit={setLength(hangAbove.right - hangAbove.left)}
+      />
+      {(["left", "right"] as const).map((end) =>
+        handle(`hang-above-${end}`, hangAbove[end], hangAbove.top, (dx, dy) =>
+          onChange({ ...wall, hangAbove: { ...hangAbove, [end]: hangAbove[end] + dx, top: hangAbove.top + dy } }),
+        ),
       )}
     </div>
   );
@@ -93,12 +90,14 @@ export function WallGuides({
 
 // An editable cm length centered on (x, y), sized to stay readable at any zoom.
 function CmField({
+  label,
   x,
   y,
   zoom,
   cm,
   onCommit,
 }: {
+  label?: string;
   x: number;
   y: number;
   zoom: number;
@@ -124,6 +123,7 @@ function CmField({
       }}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      {label && <span className="mr-1 text-stone-500">{label}</span>}
       <input
         key={rounded}
         type="number"

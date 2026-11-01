@@ -28,14 +28,13 @@ const analysisSchema = z.object({
   wall: z
     .object({
       surface: box.describe(
-        "The free surface of the main wall facing the camera: from just below the ceiling down to the top of the furniture (or the floor if there is none). Stop at corners where another wall begins, and at windows and doors",
+        "The free surface of the main wall facing the camera: from just below the ceiling down to the top of whatever is against the wall (or the floor if there is nothing). Stop at corners where another wall begins, and at windows and doors",
       ),
       surfaceWidthCm: z.number().describe("Estimated real width of surface in cm"),
-      furniture: z
+      hangAbove: z
         .object({ left: z.number(), right: z.number(), top: z.number() })
-        .nullable()
         .describe(
-          "Where the top of the sofa, sideboard, bed or desk against this wall meets the wall: the left and right ends of its back edge and its height. Only the part along this wall, e.g. not the chaise of a corner sofa reaching towards the camera",
+          "The horizontal line a gallery wall would hang above: its left and right ends and its height. If furniture or a feature is against the wall (a sofa, sideboard, bed, desk, radiator or chair rail), where its top back edge meets the wall, only along this wall (e.g. not the chaise of a corner sofa reaching towards the camera). If there is nothing, where the bottom of a gallery wall would naturally sit, about 90 cm above the floor, spanning the middle of the wall",
         ),
     })
     .nullable()
@@ -51,7 +50,7 @@ Return the four outer corners of each in the photo, in 0–1000 normalized coord
 
 Estimate each frame's real outer size in cm. Use objects of known size in the photo (sockets, doors, sofas, chairs, floorboards) for scale. Most frames come in standard sizes (13×18, 18×24, 21×30, 24×30, 30×40, 40×50, 50×70, 60×80, 70×100 and their landscape versions, plus square 30×30, 40×40, 50×50) — snap to the closest standard size unless the frame is clearly custom.
 
-If the photo shows a wall that art could be hung on, give its free surface, its real width in cm, and the back edge of the furniture against it, if any.`;
+If the photo shows a wall that art could be hung on, give its free surface, its real width in cm, and the line the art would hang above.`;
 
 export async function analyzePhoto(image: Uint8Array, jobId: string) {
   const { output } = await generateText({

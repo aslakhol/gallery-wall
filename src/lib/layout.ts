@@ -2,14 +2,13 @@ import type { Box, Point } from "./geometry";
 
 type Item = { id: string; width: number; height: number };
 
-// What the layout needs to know about the wall, in wall pixels. Furniture is the back edge where it meets the wall.
-export type FurnitureEdge = { left: number; right: number; top: number };
-export type WallSpace = { surface: Box; furniture: FurnitureEdge | null; pxPerCm: number };
+// What the layout needs to know about the wall, in wall pixels. The art hangs centered above the
+// hang-above line: the top of furniture against the wall, or a line placed where furniture would be.
+export type HangAbove = { left: number; right: number; top: number };
+export type WallSpace = { surface: Box; hangAbove: HangAbove; pxPerCm: number };
 
-const ABOVE_FURNITURE_CM = 20;
+const ABOVE_LINE_CM = 20;
 const BELOW_CEILING_CM = 15;
-// Without furniture the art is centered at eye height, measured from the bottom of the surface (the floor).
-const EYE_HEIGHT_CM = 145;
 
 const pick = <T>(options: readonly T[]) => options[Math.floor(Math.random() * options.length)];
 
@@ -31,18 +30,17 @@ function tallestInMiddle(row: Item[]) {
 }
 
 // Two or three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
-// centered above the furniture that never drops into it, reaches the ceiling or leaves the wall.
+// centered above the hang-above line that never drops below it, reaches the ceiling or leaves the wall.
 // Positions are top-left corners in wall pixels.
-export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: WallSpace): Record<string, Point> {
+export function randomLayout(items: Item[], { surface, hangAbove, pxPerCm }: WallSpace): Record<string, Point> {
   if (items.length === 0) return {};
   const gap = (5 + Math.random() * 3) * pxPerCm;
   const align = pick(["center", "top", "bottom"] as const);
 
   const top = surface.top + BELOW_CEILING_CM * pxPerCm;
-  const furnitureLimit = furniture && Math.min(surface.bottom, furniture.top) - ABOVE_FURNITURE_CM * pxPerCm;
-  const eyeLevel = surface.bottom - EYE_HEIGHT_CM * pxPerCm;
-  const availableHeight = furnitureLimit ? furnitureLimit - top : 2 * (eyeLevel - top);
-  const centerX = furniture ? (furniture.left + furniture.right) / 2 : (surface.left + surface.right) / 2;
+  const bottom = Math.min(surface.bottom, hangAbove.top) - ABOVE_LINE_CM * pxPerCm;
+  const availableHeight = bottom - top;
+  const centerX = (hangAbove.left + hangAbove.right) / 2;
   const surfaceWidth = surface.right - surface.left;
 
   const rowWidth = (row: Item[]) => row.reduce((sum, item) => sum + item.width, 0) + gap * Math.max(0, row.length - 1);
@@ -66,9 +64,9 @@ export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: Wal
   const rows = chosen.map((row) => (Math.random() < 0.5 ? tallestInMiddle(row) : shuffle(row)));
 
   const height = clusterHeight(rows);
-  let y = Math.max(top, furnitureLimit ? furnitureLimit - height : eyeLevel - height / 2);
+  let y = Math.max(top, bottom - height);
   const width = Math.max(...rows.map(rowWidth));
-  // Shift sideways to stay within the wall's edges when the furniture sits off-center.
+  // Shift sideways to stay within the wall's edges when the line sits off-center.
   const clusterCenter = Math.min(Math.max(centerX, surface.left + width / 2), surface.right - width / 2);
 
   const positions: Record<string, Point> = {};
