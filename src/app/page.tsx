@@ -25,8 +25,7 @@ const plans = [
       "Unlimited layouts",
       "Sizes in centimetres",
       "Save and compare layouts",
-      "Full-resolution download",
-      "Hanging measurements for every nail",
+      "Where to hang every frame, in centimetres",
     ],
   },
   {
@@ -93,6 +92,7 @@ const features = [
   { title: "Every frame in centimetres", body: "Sizes are estimated from your photos and shown on every piece." },
   { title: "One measurement fixes the scale", body: "Type the width of your sofa or wall and everything rescales." },
   { title: "Any wall", body: "Above a sofa, sideboard, bed or radiator — or a bare wall." },
+  { title: "Know where to hang each frame", body: "Tap a frame to see how high and how far from centre it goes." },
   { title: "Compare favourites", body: "Save layouts as you go and switch back with one tap." },
 ];
 
