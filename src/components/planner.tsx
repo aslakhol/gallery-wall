@@ -70,7 +70,8 @@ const viaApi =
   });
 
 // A photo that has already been processed, for trying the planner without uploading anything.
-export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis };
+// `hidden` lists the labels of art that starts in the tray, off the wall.
+export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis; hidden: string[] };
 
 function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
   const surface = boxToPixels(wall.surface, width, height);
@@ -135,7 +136,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   const updatePhoto = (id: string, patch: Partial<Photo>) =>
     setPhotos((all) => all.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
 
-  async function addPhoto(file: Blob, process: Processor) {
+  async function addPhoto(file: Blob, process: Processor, hiddenLabels: string[] = []) {
     const id = crypto.randomUUID();
     const { blob, width, height, pixels } = await preparePhoto(file);
     setPhotos((all) => [...all, { id, url: URL.createObjectURL(blob), width, height }]);
@@ -155,7 +156,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
           label: art.label,
           ...unwarp(pixels, quad),
           longestCm: Math.max(art.widthCm, art.heightCm),
-          hidden: false,
+          hidden: hiddenLabels.includes(art.label),
         };
       });
       setPieces((all) => [...all, ...found]);
@@ -177,7 +178,11 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
     void fetch(example.photo)
       .then((response) => response.blob())
       .then((photo) =>
-        addPhoto(photo, () => ({ analysis: Promise.resolve(example.analysis), cleanUrl: Promise.resolve(example.cleanUrl) })),
+        addPhoto(
+          photo,
+          () => ({ analysis: Promise.resolve(example.analysis), cleanUrl: Promise.resolve(example.cleanUrl) }),
+          example.hidden,
+        ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the example is fixed for the planner's lifetime
   }, []);

@@ -6,6 +6,7 @@ import room from "./room.jpg";
 export const example: Example = {
   photo: room.src,
   cleanUrl: clean.src,
+  hidden: ["square textile art"],
   analysis: {
     art: [
       {
