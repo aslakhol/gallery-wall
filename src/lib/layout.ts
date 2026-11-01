@@ -30,8 +30,8 @@ function tallestInMiddle(row: Item[]) {
   return result;
 }
 
-// Rows of pieces with a shared vertical alignment per row, spread to equal width so the cluster has straight sides.
-// Above furniture, the cluster aims for roughly the furniture's width, centered over it, and never drops into it.
+// Two or three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
+// centered above the furniture that never drops into it, reaches the ceiling or leaves the wall.
 // Positions are top-left corners in wall pixels.
 export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: WallSpace): Record<string, Point> {
   if (items.length === 0) return {};
@@ -43,8 +43,7 @@ export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: Wal
   const eyeLevel = surface.bottom - EYE_HEIGHT_CM * pxPerCm;
   const availableHeight = furnitureLimit ? furnitureLimit - top : 2 * (eyeLevel - top);
   const centerX = furniture ? (furniture.left + furniture.right) / 2 : (surface.left + surface.right) / 2;
-  const baseWidth = furniture ? furniture.right - furniture.left : (surface.right - surface.left) * 0.6;
-  const targetWidth = baseWidth * (0.75 + Math.random() * 0.25);
+  const surfaceWidth = surface.right - surface.left;
 
   const rowWidth = (row: Item[]) => row.reduce((sum, item) => sum + item.width, 0) + gap * Math.max(0, row.length - 1);
   const rowHeight = (row: Item[]) => Math.max(...row.map((item) => item.height));
@@ -56,21 +55,15 @@ export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: Wal
     return rows.filter((row) => row.length > 0);
   }
 
-  // Closest to the target width wins; running out of wall is much worse than missing the width.
-  const surfaceWidth = surface.right - surface.left;
-  const candidates = Array.from({ length: items.length }, (_, i) => balancedRows(i + 1))
-    .map((rows) => {
-      const width = Math.max(...rows.map(rowWidth));
-      const widthMiss = Math.abs(width - targetWidth) / targetWidth;
-      const widthOverflow = Math.max(0, width - surfaceWidth) / surfaceWidth;
-      const heightOverflow = Math.max(0, clusterHeight(rows) - availableHeight) / availableHeight;
-      return { rows, score: widthMiss + (widthOverflow + heightOverflow) * 10 };
-    })
-    .sort((a, b) => a.score - b.score);
-  // Some variety: sometimes take the runner-up when it is nearly as good.
-  const [best, runnerUp] = candidates;
-  const chosen = runnerUp && runnerUp.score < best.score + 0.15 && Math.random() < 0.4 ? runnerUp : best;
-  const rows = chosen.rows.map((row) => (Math.random() < 0.5 ? tallestInMiddle(row) : shuffle(row)));
+  // Pick between the two fewest row counts (from two rows up) that fit on the wall.
+  const options = Array.from({ length: items.length }, (_, i) => balancedRows(i + 1)).filter(
+    (rows) => rows.length >= Math.min(2, items.length),
+  );
+  const fitting = options.filter(
+    (rows) => Math.max(...rows.map(rowWidth)) <= surfaceWidth && clusterHeight(rows) <= availableHeight,
+  );
+  const chosen = fitting.length > 0 ? pick(fitting.slice(0, 2)) : options.at(-1)!;
+  const rows = chosen.map((row) => (Math.random() < 0.5 ? tallestInMiddle(row) : shuffle(row)));
 
   const height = clusterHeight(rows);
   let y = Math.max(top, furnitureLimit ? furnitureLimit - height : eyeLevel - height / 2);
@@ -81,10 +74,10 @@ export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: Wal
   const positions: Record<string, Point> = {};
   for (const row of rows) {
     const h = rowHeight(row);
-    // Widen the gaps to match the widest row, unless that would leave the row looking sparse.
+    // Even out slightly shorter rows towards the widest one, but keep gaps close to even.
     const itemsWidth = row.reduce((sum, item) => sum + item.width, 0);
-    const spreadGap = row.length > 1 ? (width - itemsWidth) / (row.length - 1) : Infinity;
-    const rowGap = spreadGap <= gap * 2.5 ? spreadGap : gap;
+    const spreadGap = row.length > 1 ? (width - itemsWidth) / (row.length - 1) : gap;
+    const rowGap = Math.min(spreadGap, gap * 1.5);
     let x = clusterCenter - (itemsWidth + rowGap * (row.length - 1)) / 2;
     for (const item of row) {
       const offset = { top: 0, center: (h - item.height) / 2, bottom: h - item.height }[align];
