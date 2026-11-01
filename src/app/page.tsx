@@ -119,7 +119,7 @@ const faqs = [
   },
   {
     q: "What happens to my photos?",
-    a: "They're processed to find your art and clear your wall. We don't keep them.",
+    a: "They're kept with your plan so you can come back to it on any device. Only people with your plan's link can see it.",
   },
 ];
 
