@@ -2,9 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
-import { boxToPixels, toPixels, unwarp, type Box } from "@/lib/geometry";
+import { boxToPixels, toPixels, unwarp } from "@/lib/geometry";
 import { JOB_HEADER } from "@/lib/job";
-import { randomLayout } from "@/lib/layout";
+import { randomLayout, type WallSpace } from "@/lib/layout";
 import { WallStage, type StageItem } from "./wall-stage";
 
 type Photo = {
@@ -29,7 +29,7 @@ type Piece = {
 type Placement = { x: number; y: number; scale: number };
 type Layout = Record<string, Placement>;
 
-type Wall = { photo: Photo; area: Box; pxPerCm: number };
+type Wall = WallSpace & { photo: Photo };
 
 const MAX_EDGE = 2048;
 
@@ -57,8 +57,9 @@ async function post(path: string, body: Blob, jobId: string) {
 function toWall(photo: Photo): Wall | undefined {
   const wall = photo.analysis?.wall;
   if (!wall) return undefined;
-  const area = boxToPixels(wall.hangArea, photo.width, photo.height);
-  return { photo, area, pxPerCm: (area.right - area.left) / wall.hangAreaWidthCm };
+  const surface = boxToPixels(wall.surface, photo.width, photo.height);
+  const furniture = wall.furniture && boxToPixels(wall.furniture, photo.width, photo.height);
+  return { photo, surface, furniture, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
 }
 
 // Pieces keep the proportions seen in the photo; the estimated real size only sets how big they are.
@@ -73,8 +74,7 @@ function shuffledLayout(pieces: Piece[], wall: Wall, current: Layout | undefined
   const scaleOf = (piece: Piece) => current?.[piece.id]?.scale ?? 1;
   const positions = randomLayout(
     pieces.map((piece) => ({ id: piece.id, ...pieceSize(piece, wall, scaleOf(piece)) })),
-    wall.area,
-    wall.pxPerCm,
+    wall,
   );
   return Object.fromEntries(pieces.map((piece) => [piece.id, { ...positions[piece.id], scale: scaleOf(piece) }]));
 }

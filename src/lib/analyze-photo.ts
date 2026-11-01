@@ -27,8 +27,13 @@ const analysisSchema = z.object({
   ),
   wall: z
     .object({
-      hangArea: box.describe("The empty wall area where a gallery wall would naturally hang, e.g. above the sofa"),
-      hangAreaWidthCm: z.number().describe("Estimated real width of hangArea in cm"),
+      surface: box.describe(
+        "The free wall surface around where art would hang: from just below the ceiling down to the top of the furniture (or the floor if there is none), between the wall's edges or obstacles like windows and doors",
+      ),
+      surfaceWidthCm: z.number().describe("Estimated real width of surface in cm"),
+      furniture: box
+        .nullable()
+        .describe("The sofa, sideboard, bed or desk against this wall that a gallery wall would hang above, if any"),
     })
     .nullable()
     .describe("null if the photo doesn't show a wall that art could be hung on"),
@@ -43,7 +48,7 @@ Return the four outer corners of each in the photo, in 0–1000 normalized coord
 
 Estimate each frame's real outer size in cm. Use objects of known size in the photo (sockets, doors, sofas, chairs, floorboards) for scale. Most frames come in standard sizes (13×18, 18×24, 21×30, 24×30, 30×40, 40×50, 50×70, 60×80, 70×100 and their landscape versions, plus square 30×30, 40×40, 50×50) — snap to the closest standard size unless the frame is clearly custom.
 
-If the photo shows a wall that art could be hung on, give the empty area where a gallery wall would naturally go and estimate its real width in cm.`;
+If the photo shows a wall that art could be hung on, give its free surface, its real width in cm, and the furniture against it, if any.`;
 
 export async function analyzePhoto(image: Uint8Array, jobId: string) {
   const { output } = await generateText({
