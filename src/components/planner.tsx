@@ -30,6 +30,7 @@ type Piece = {
 
 type Placement = { x: number; y: number; scale: number };
 type Layout = Record<string, Placement>;
+type SavedLayout = { id: string; layout: Layout; visibleIds: string[] };
 
 type Wall = WallSpace & { photo: Photo };
 
@@ -110,6 +111,7 @@ export function Planner() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [layouts, setLayouts] = useState<Record<string, Layout>>({});
   const [chosenWallId, setChosenWallId] = useState<string>();
+  const [saved, setSaved] = useState<Record<string, SavedLayout[]>>({});
   const [showMeasurements, setShowMeasurements] = useState(false);
   // One job per planning session, started by the first upload; AI costs are reported per job.
   const jobIdRef = useRef<string>(undefined);
@@ -185,14 +187,40 @@ export function Planner() {
   const toggleHidden = (id: string) =>
     setPieces((all) => all.map((piece) => (piece.id === id ? { ...piece, hidden: !piece.hidden } : piece)));
 
+  const savedLayouts = (activeWall && saved[activeWall.photo.id]) ?? [];
+
+  // Keeps the current layout as is. Storing the same object marks it as the one on the wall.
+  function saveLayout() {
+    if (!activeWall) return;
+    const entry = { id: crypto.randomUUID(), layout, visibleIds: visiblePieces.map((piece) => piece.id) };
+    setLayouts((all) => ({ ...all, [activeWall.photo.id]: layout }));
+    setSaved((all) => ({ ...all, [activeWall.photo.id]: [...savedLayouts, entry] }));
+  }
+
+  function restoreLayout(entry: SavedLayout) {
+    if (!activeWall) return;
+    setLayouts((all) => ({ ...all, [activeWall.photo.id]: entry.layout }));
+    setPieces((all) => all.map((piece) => ({ ...piece, hidden: !entry.visibleIds.includes(piece.id) })));
+  }
+
   function changeWall(wall: WallSpace) {
     if (!activeWall) return;
     const wallId = activeWall.photo.id;
     const ratio = wall.pxPerCm / activeWall.pxPerCm;
     if (ratio !== 1) {
-      setLayouts((all) => ({ ...all, [wallId]: rescaleLayout(layout, pieces, activeWall, ratio) }));
+      const rescale = (placements: Layout) => rescaleLayout(placements, pieces, activeWall, ratio);
+      // Saved layouts are rescaled too, and the current one keeps pointing at its saved entry.
+      const rescaledSaved = savedLayouts.map((entry) => ({ ...entry, layout: rescale(entry.layout) }));
+      const savedIndex = savedLayouts.findIndex((entry) => entry.layout === storedLayout);
+      setSaved((all) => ({ ...all, [wallId]: rescaledSaved }));
+      setLayouts((all) => ({ ...all, [wallId]: savedIndex >= 0 ? rescaledSaved[savedIndex].layout : rescale(layout) }));
     }
     updatePhoto(wallId, { wall });
+  }
+
+  function deleteLayout(id: string) {
+    if (!activeWall) return;
+    setSaved((all) => ({ ...all, [activeWall.photo.id]: savedLayouts.filter((entry) => entry.id !== id) }));
   }
 
   const itemsFor = (wall: Wall, placements: Layout, shown: Piece[]): StageItem[] =>
@@ -277,6 +305,13 @@ export function Planner() {
           Measure
         </button>
         <button
+          className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 disabled:opacity-40"
+          disabled={!activeWall?.photo.cleanUrl || stageItems.length === 0}
+          onClick={saveLayout}
+        >
+          Save
+        </button>
+        <button
           className="shrink-0 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
           disabled={!activeWall?.photo.cleanUrl || visiblePieces.length === 0}
           onClick={shuffle}
@@ -284,6 +319,35 @@ export function Planner() {
           Random
         </button>
       </header>
+
+      {activeWall?.photo.cleanUrl && savedLayouts.length > 0 && (
+        <nav className="flex gap-3 overflow-x-auto border-b border-stone-200 bg-white px-4 py-2">
+          {savedLayouts.map((entry, i) => (
+            <div key={entry.id} className="group relative shrink-0">
+              <button
+                onClick={() => restoreLayout(entry)}
+                className={`block overflow-hidden rounded-md ring-2 ${
+                  storedLayout === entry.layout ? "ring-blue-500" : "ring-transparent hover:ring-stone-300"
+                }`}
+              >
+                <LayoutPreview
+                  wall={activeWall}
+                  image={activeWall.photo.cleanUrl!}
+                  items={itemsFor(activeWall, entry.layout, pieces.filter((piece) => entry.visibleIds.includes(piece.id)))}
+                />
+                <span className="absolute left-1 top-1 rounded bg-white/90 px-1.5 text-xs font-medium">{i + 1}</span>
+              </button>
+              <button
+                aria-label={`Delete layout ${i + 1}`}
+                onClick={() => deleteLayout(entry.id)}
+                className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-xs text-white group-hover:flex"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </nav>
+      )}
 
       <section className="relative min-h-0 flex-1">
         {activeWall?.photo.cleanUrl ? (
@@ -320,6 +384,31 @@ export function Planner() {
         </footer>
       )}
     </main>
+  );
+}
+
+const PREVIEW_HEIGHT = 64;
+
+// A small, static rendering of a layout on its wall.
+function LayoutPreview({ wall, image, items }: { wall: Wall; image: string; items: StageItem[] }) {
+  const scale = PREVIEW_HEIGHT / wall.photo.height;
+  return (
+    <div className="relative overflow-hidden" style={{ width: wall.photo.width * scale, height: PREVIEW_HEIGHT }}>
+      <div className="absolute left-0 top-0 origin-top-left" style={{ width: wall.photo.width, height: wall.photo.height, transform: `scale(${scale})` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+        <img src={image} alt="" className="absolute inset-0 h-full w-full" />
+        {items.map((item) => (
+          // eslint-disable-next-line @next/next/no-img-element -- generated data URL
+          <img
+            key={item.id}
+            src={item.url}
+            alt=""
+            className="absolute"
+            style={{ left: item.x, top: item.y, width: item.width, height: item.height }}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
