@@ -249,6 +249,7 @@ export function Planner() {
             height={activeWall.photo.height}
             items={stageItems}
             onChange={changePlacement}
+            guides={new URLSearchParams(location.search).has("debug") ? activeWall : undefined}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-stone-400">
