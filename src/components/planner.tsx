@@ -131,6 +131,8 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   const [chosenWallId, setChosenWallId] = useState<string>();
   const [saved, setSaved] = useState<Record<string, SavedLayout[]>>({});
   const [showMeasurements, setShowMeasurements] = useState(false);
+  // New layout pulses until it's first pressed, since it's the main thing to do.
+  const [hasShuffled, setHasShuffled] = useState(false);
   // One job per planning session, started by the first upload; AI costs are reported per job.
   const jobIdRef = useRef<string>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -212,6 +214,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
 
   function shuffle() {
     if (!activeWall) return;
+    setHasShuffled(true);
     setLayouts((all) => ({ ...all, [activeWall.photo.id]: shuffledLayout(visiblePieces, activeWall, layout) }));
   }
 
@@ -268,6 +271,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
 
   const stageItems = activeWall ? itemsFor(activeWall, layout, visiblePieces) : [];
 
+  const canShuffle = !!activeWall?.photo.cleanUrl && visiblePieces.length > 0;
   const processing = photos.some((photo) => !photo.failed && (!photo.analysis || !photo.cleanUrl));
 
   const uploadInput = (
@@ -384,10 +388,13 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
           Measure
         </button>
         <button
-          className="flex shrink-0 items-center gap-2 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
-          disabled={!activeWall?.photo.cleanUrl || visiblePieces.length === 0}
+          className="relative flex shrink-0 items-center gap-2 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
+          disabled={!canShuffle}
           onClick={shuffle}
         >
+          {canShuffle && !hasShuffled && (
+            <span className="pointer-events-none absolute -inset-1 animate-pulse rounded-full border-2 border-[#c2683f]" />
+          )}
           <ShuffleIcon className="h-4 w-4" />
           New layout
         </button>
