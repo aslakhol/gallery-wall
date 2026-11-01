@@ -164,7 +164,7 @@ export default function Landing() {
         <section id="try" className="mx-auto max-w-6xl scroll-mt-6 px-6 pb-24">
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
             <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Try it on our wall</h2>
-            <p className="text-stone-500">Press Random, drag the frames or turn on Measure.</p>
+            <p className="text-stone-500">Press New layout, drag the frames or turn on Measure.</p>
           </div>
           <div className="mt-8 h-[min(80vh,720px)] overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(41,37,36,0.5)] ring-1 ring-stone-900/10">
             <Planner example={example} className="h-full" />

@@ -384,11 +384,12 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
           Measure
         </button>
         <button
-          className="shrink-0 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-2 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
           disabled={!activeWall?.photo.cleanUrl || visiblePieces.length === 0}
           onClick={shuffle}
         >
-          Random
+          <ShuffleIcon className="h-4 w-4" />
+          New layout
         </button>
       </header>
 
@@ -453,6 +454,14 @@ function LayoutPreview({ wall, image, items }: { wall: Wall; image: string; item
         ))}
       </div>
     </div>
+  );
+}
+
+function ShuffleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+    </svg>
   );
 }
 
