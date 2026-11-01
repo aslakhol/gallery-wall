@@ -8,11 +8,11 @@ import after from "@/assets/landing/after.jpg";
 import appMeasure from "@/assets/landing/app-measure.jpg";
 import before from "@/assets/example/room.jpg";
 import clean from "@/assets/example/clean.jpg";
-import botanical from "@/assets/landing/piece-1.jpg";
-import photograph from "@/assets/landing/piece-2.jpg";
-import print from "@/assets/landing/piece-3.jpg";
-import poster from "@/assets/landing/piece-4.jpg";
-import textile from "@/assets/landing/piece-6.jpg";
+import botanical from "@/assets/landing/botanical.jpg";
+import coastal from "@/assets/landing/coastal.jpg";
+import poster from "@/assets/landing/poster.jpg";
+import textile from "@/assets/landing/textile.jpg";
+import watercolour from "@/assets/landing/watercolour.jpg";
 
 // Priced per wall, since most people plan one wall at a time. Prices are placeholders until payments are in place.
 const plans = [
@@ -182,7 +182,7 @@ export default function Landing() {
                     {i === 1 && (
                       // The art found in the photo, collected in a tray like the planner's.
                       <div className="absolute inset-x-3 bottom-3 flex h-14 items-center justify-center gap-2 overflow-hidden rounded-lg bg-white/90 px-3 shadow-lg backdrop-blur">
-                        {[botanical, photograph, print, poster, textile].map((piece) => (
+                        {[botanical, coastal, poster, watercolour, textile].map((piece) => (
                           <Image key={piece.src} src={piece} alt="" className="h-9 w-auto rounded-[2px] shadow ring-1 ring-black/5 sm:h-10" />
                         ))}
                       </div>
