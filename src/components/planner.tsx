@@ -304,6 +304,34 @@ export function Planner() {
         >
           Measure
         </button>
+        {activeWall?.photo.cleanUrl && savedLayouts.length > 0 && (
+          <div className="flex max-w-[40vw] gap-2 overflow-x-auto p-1">
+            {savedLayouts.map((entry, i) => (
+              <div key={entry.id} className="group relative shrink-0">
+                <button
+                  onClick={() => restoreLayout(entry)}
+                  className={`block overflow-hidden rounded-md ring-2 ${
+                    storedLayout === entry.layout ? "ring-blue-500" : "ring-transparent hover:ring-stone-300"
+                  }`}
+                >
+                  <LayoutPreview
+                    wall={activeWall}
+                    image={activeWall.photo.cleanUrl!}
+                    items={itemsFor(activeWall, entry.layout, pieces.filter((piece) => entry.visibleIds.includes(piece.id)))}
+                  />
+                  <span className="absolute left-0.5 top-0.5 rounded bg-white/90 px-1 text-[10px] font-medium">{i + 1}</span>
+                </button>
+                <button
+                  aria-label={`Delete layout ${i + 1}`}
+                  onClick={() => deleteLayout(entry.id)}
+                  className="absolute right-0.5 top-0.5 hidden h-4 w-4 items-center justify-center rounded-full bg-stone-900 text-[10px] text-white group-hover:flex"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <button
           className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 disabled:opacity-40"
           disabled={!activeWall?.photo.cleanUrl || stageItems.length === 0}
@@ -319,35 +347,6 @@ export function Planner() {
           Random
         </button>
       </header>
-
-      {activeWall?.photo.cleanUrl && savedLayouts.length > 0 && (
-        <nav className="flex gap-3 overflow-x-auto border-b border-stone-200 bg-white px-4 py-2">
-          {savedLayouts.map((entry, i) => (
-            <div key={entry.id} className="group relative shrink-0">
-              <button
-                onClick={() => restoreLayout(entry)}
-                className={`block overflow-hidden rounded-md ring-2 ${
-                  storedLayout === entry.layout ? "ring-blue-500" : "ring-transparent hover:ring-stone-300"
-                }`}
-              >
-                <LayoutPreview
-                  wall={activeWall}
-                  image={activeWall.photo.cleanUrl!}
-                  items={itemsFor(activeWall, entry.layout, pieces.filter((piece) => entry.visibleIds.includes(piece.id)))}
-                />
-                <span className="absolute left-1 top-1 rounded bg-white/90 px-1.5 text-xs font-medium">{i + 1}</span>
-              </button>
-              <button
-                aria-label={`Delete layout ${i + 1}`}
-                onClick={() => deleteLayout(entry.id)}
-                className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-xs text-white group-hover:flex"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </nav>
-      )}
 
       <section className="relative min-h-0 flex-1">
         {activeWall?.photo.cleanUrl ? (
@@ -387,7 +386,8 @@ export function Planner() {
   );
 }
 
-const PREVIEW_HEIGHT = 64;
+// With the ring padding this matches the wall thumbnails, so the header keeps its height.
+const PREVIEW_HEIGHT = 40;
 
 // A small, static rendering of a layout on its wall.
 function LayoutPreview({ wall, image, items }: { wall: Wall; image: string; items: StageItem[] }) {
