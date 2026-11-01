@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { WallSpace } from "@/lib/layout";
+import { trackPointer } from "./track-pointer";
+import { WallGuides } from "./wall-guides";
 
 export type StageItem = {
   id: string;
@@ -17,21 +19,25 @@ export type StageItem = {
 type Change = { x?: number; y?: number; scale?: number };
 
 // Shows the wall photo at its natural pixel size, scaled to fit, with draggable and resizable pieces on top.
+// With measurements on, it also shows the wall guides and every piece's size in cm.
 export function WallStage({
   image,
   width,
   height,
   items,
   onChange,
-  guides,
+  wall,
+  showMeasurements,
+  onWallChange,
 }: {
   image: string;
   width: number;
   height: number;
   items: StageItem[];
   onChange: (id: string, change: Change) => void;
-  // Outlines what the analysis thinks the wall and furniture are, for debugging layouts.
-  guides?: WallSpace;
+  wall: WallSpace;
+  showMeasurements: boolean;
+  onWallChange: (wall: WallSpace) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0);
@@ -48,29 +54,14 @@ export function WallStage({
     return () => observer.disconnect();
   }, [width, height]);
 
-  // Follow the pointer until release, reporting the movement in wall pixels.
-  function track(event: ReactPointerEvent, onMove: (dx: number, dy: number) => void) {
-    event.stopPropagation();
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
-    const start = { x: event.clientX, y: event.clientY };
-    const move = (e: PointerEvent) => onMove((e.clientX - start.x) / zoom, (e.clientY - start.y) / zoom);
-    const up = () => {
-      target.removeEventListener("pointermove", move as EventListener);
-      target.removeEventListener("pointerup", up);
-    };
-    target.addEventListener("pointermove", move as EventListener);
-    target.addEventListener("pointerup", up);
-  }
-
   function startDrag(event: ReactPointerEvent, item: StageItem) {
     setSelectedId(item.id);
     setStackOrder((order) => [...order.filter((id) => id !== item.id), item.id]);
-    track(event, (dx, dy) => onChange(item.id, { x: item.x + dx, y: item.y + dy }));
+    trackPointer(event, zoom, (dx, dy) => onChange(item.id, { x: item.x + dx, y: item.y + dy }));
   }
 
   function startResize(event: ReactPointerEvent, item: StageItem) {
-    track(event, (dx) => onChange(item.id, { scale: Math.max(0.1, item.scale * (1 + dx / item.width)) }));
+    trackPointer(event, zoom, (dx) => onChange(item.id, { scale: Math.max(0.1, item.scale * (1 + dx / item.width)) }));
   }
 
   // Scroll over a piece to resize it around its center.
@@ -92,31 +83,6 @@ export function WallStage({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
           <img src={image} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
-          {guides && (
-            <>
-              <div
-                className="absolute border-dashed border-fuchsia-500"
-                style={{
-                  left: guides.surface.left,
-                  top: guides.surface.top,
-                  width: guides.surface.right - guides.surface.left,
-                  height: guides.surface.bottom - guides.surface.top,
-                  borderWidth: 3 / zoom,
-                }}
-              />
-              {guides.furniture && (
-                <div
-                  className="absolute bg-amber-500"
-                  style={{
-                    left: guides.furniture.left,
-                    top: guides.furniture.top,
-                    width: guides.furniture.right - guides.furniture.left,
-                    height: 4 / zoom,
-                  }}
-                />
-              )}
-            </>
-          )}
           {items.map((item) => (
             <div
               key={item.id}
@@ -139,6 +105,14 @@ export function WallStage({
                 className="h-full w-full select-none shadow-[2px_6px_12px_rgba(0,0,0,0.35)]"
                 style={{ outline: selectedId === item.id ? `${3 / zoom}px solid #3b82f6` : undefined }}
               />
+              {showMeasurements && (
+                <span
+                  className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-white/90 font-medium text-stone-900 shadow"
+                  style={{ bottom: 6 / zoom, fontSize: 12 / zoom, padding: `${1 / zoom}px ${5 / zoom}px` }}
+                >
+                  {Math.round(item.width / wall.pxPerCm)} × {Math.round(item.height / wall.pxPerCm)} cm
+                </span>
+              )}
               {selectedId === item.id && (
                 <div
                   className="absolute rounded-full border-white bg-blue-500 cursor-nwse-resize touch-none"
@@ -154,6 +128,7 @@ export function WallStage({
               )}
             </div>
           ))}
+          {showMeasurements && <WallGuides wall={wall} zoom={zoom} onChange={onWallChange} />}
         </div>
       )}
     </div>

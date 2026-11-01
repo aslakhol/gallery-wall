@@ -13,6 +13,8 @@ type Photo = {
   width: number;
   height: number;
   analysis?: PhotoAnalysis;
+  // The analyzed wall in pixels, which the user can correct.
+  wall?: WallSpace;
   cleanUrl?: string;
   failed?: boolean;
 };
@@ -54,16 +56,14 @@ async function post(path: string, body: Blob, jobId: string) {
   return response;
 }
 
-function toWall(photo: Photo): Wall | undefined {
-  const wall = photo.analysis?.wall;
-  if (!wall) return undefined;
-  const surface = boxToPixels(wall.surface, photo.width, photo.height);
+function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
+  const surface = boxToPixels(wall.surface, width, height);
   const furniture = wall.furniture && {
-    left: (wall.furniture.left / 1000) * photo.width,
-    right: (wall.furniture.right / 1000) * photo.width,
-    top: (wall.furniture.top / 1000) * photo.height,
+    left: (wall.furniture.left / 1000) * width,
+    right: (wall.furniture.right / 1000) * width,
+    top: (wall.furniture.top / 1000) * height,
   };
-  return { photo, surface, furniture, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
+  return { surface, furniture, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
 }
 
 // Pieces keep the proportions seen in the photo; the estimated real size only sets how big they are.
@@ -72,6 +72,28 @@ function pieceSize(piece: Piece, wall: Wall, scale: number) {
   return piece.aspect >= 1
     ? { width: longest, height: longest / piece.aspect }
     : { width: longest * piece.aspect, height: longest };
+}
+
+// Keep an arrangement's proportions when the wall's scale changes: pieces grow or shrink,
+// and their positions scale around the bottom center of the cluster so it keeps its place above the furniture.
+function rescaleLayout(layout: Layout, pieces: Piece[], from: Wall, ratio: number): Layout {
+  const boxes = pieces.flatMap((piece) => {
+    const placement = layout[piece.id];
+    return placement ? [{ id: piece.id, placement, ...pieceSize(piece, from, placement.scale) }] : [];
+  });
+  if (boxes.length === 0) return layout;
+  const anchorX = boxes.reduce((sum, b) => sum + b.placement.x + b.width / 2, 0) / boxes.length;
+  const anchorY = Math.max(...boxes.map((b) => b.placement.y + b.height));
+  return {
+    ...layout,
+    ...Object.fromEntries(
+      boxes.map(({ id, placement, width, height }) => {
+        const centerX = anchorX + (placement.x + width / 2 - anchorX) * ratio;
+        const centerY = anchorY + (placement.y + height / 2 - anchorY) * ratio;
+        return [id, { ...placement, x: centerX - (width * ratio) / 2, y: centerY - (height * ratio) / 2 }];
+      }),
+    ),
+  };
 }
 
 function shuffledLayout(pieces: Piece[], wall: Wall, current: Layout | undefined): Layout {
@@ -88,6 +110,7 @@ export function Planner() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [layouts, setLayouts] = useState<Record<string, Layout>>({});
   const [chosenWallId, setChosenWallId] = useState<string>();
+  const [showMeasurements, setShowMeasurements] = useState(false);
   // One job per planning session, started by the first upload; AI costs are reported per job.
   const jobIdRef = useRef<string>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -104,7 +127,7 @@ export function Planner() {
     const analyze = post("/api/analyze", blob, jobId)
       .then((response) => response.json() as Promise<PhotoAnalysis>)
       .then((analysis) => {
-        updatePhoto(id, { analysis });
+        updatePhoto(id, { analysis, wall: analysis.wall ? wallSpace(analysis.wall, width, height) : undefined });
         const found = analysis.art.map((art): Piece => {
           const quad = {
             topLeft: toPixels(art.corners.topLeft, width, height),
@@ -133,7 +156,7 @@ export function Planner() {
     });
   }
 
-  const walls = photos.flatMap((photo) => toWall(photo) ?? []);
+  const walls = photos.flatMap((photo): Wall[] => (photo.wall ? [{ ...photo.wall, photo }] : []));
   const activeWall =
     walls.find((wall) => wall.photo.id === chosenWallId) ?? walls.find((wall) => wall.photo.cleanUrl) ?? walls[0];
   const visiblePieces = pieces.filter((piece) => !piece.hidden);
@@ -162,13 +185,24 @@ export function Planner() {
   const toggleHidden = (id: string) =>
     setPieces((all) => all.map((piece) => (piece.id === id ? { ...piece, hidden: !piece.hidden } : piece)));
 
-  const stageItems: StageItem[] = activeWall
-    ? visiblePieces.flatMap((piece) => {
-        const placement = layout[piece.id];
-        if (!placement) return [];
-        return [{ ...piece, ...placement, ...pieceSize(piece, activeWall, placement.scale) }];
-      })
-    : [];
+  function changeWall(wall: WallSpace) {
+    if (!activeWall) return;
+    const wallId = activeWall.photo.id;
+    const ratio = wall.pxPerCm / activeWall.pxPerCm;
+    if (ratio !== 1) {
+      setLayouts((all) => ({ ...all, [wallId]: rescaleLayout(layout, pieces, activeWall, ratio) }));
+    }
+    updatePhoto(wallId, { wall });
+  }
+
+  const itemsFor = (wall: Wall, placements: Layout, shown: Piece[]): StageItem[] =>
+    shown.flatMap((piece) => {
+      const placement = placements[piece.id];
+      if (!placement) return [];
+      return [{ ...piece, ...placement, ...pieceSize(piece, wall, placement.scale) }];
+    });
+
+  const stageItems = activeWall ? itemsFor(activeWall, layout, visiblePieces) : [];
 
   const processing = photos.some((photo) => !photo.failed && (!photo.analysis || !photo.cleanUrl));
 
@@ -233,6 +267,16 @@ export function Planner() {
           Add photos
         </button>
         <button
+          aria-pressed={showMeasurements}
+          className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium ${
+            showMeasurements ? "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700" : "border-stone-300 hover:bg-stone-50"
+          }`}
+          disabled={!activeWall}
+          onClick={() => setShowMeasurements((on) => !on)}
+        >
+          Measure
+        </button>
+        <button
           className="shrink-0 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-40"
           disabled={!activeWall?.photo.cleanUrl || visiblePieces.length === 0}
           onClick={shuffle}
@@ -249,7 +293,9 @@ export function Planner() {
             height={activeWall.photo.height}
             items={stageItems}
             onChange={changePlacement}
-            guides={new URLSearchParams(location.search).has("debug") ? activeWall : undefined}
+            wall={activeWall}
+            showMeasurements={showMeasurements}
+            onWallChange={changeWall}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-stone-400">
