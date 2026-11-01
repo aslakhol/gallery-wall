@@ -32,9 +32,9 @@ export function BeforeAfter({ before, after }: { before: StaticImageData; after:
       className="relative overflow-hidden rounded-2xl shadow-[0_30px_80px_-20px_rgba(41,37,36,0.45)] ring-1 ring-stone-900/10 select-none"
       style={{ aspectRatio: `${before.width} / ${before.height}` }}
     >
-      <Image src={before} alt="A living room with framed art leaning on the sofa" fill priority sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover" />
+      <Image src={before} alt="A room with framed art leaning against the wall" fill priority sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover" />
       <div className="absolute inset-0" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
-        <Image src={after} alt="The same room with the art arranged on the wall above the sofa" fill priority sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover" />
+        <Image src={after} alt="The same room with the art arranged on the wall" fill priority sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover" />
       </div>
 
       <span className="pointer-events-none absolute left-4 top-4 rounded-full bg-stone-900/70 px-3 py-1 text-xs font-medium text-white backdrop-blur">

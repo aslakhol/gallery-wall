@@ -2,22 +2,24 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BeforeAfter } from "@/components/landing/before-after";
+import { Planner } from "@/components/planner";
+import { example } from "@/assets/example/example";
 import after from "@/assets/landing/after.jpg";
 import appMeasure from "@/assets/landing/app-measure.jpg";
-import before from "@/assets/landing/before.jpg";
-import clean from "@/assets/landing/clean.jpg";
-import piece0 from "@/assets/landing/piece-0.jpg";
-import piece2 from "@/assets/landing/piece-2.jpg";
-import piece4 from "@/assets/landing/piece-4.jpg";
-import piece6 from "@/assets/landing/piece-6.jpg";
-import piece7 from "@/assets/landing/piece-7.jpg";
+import before from "@/assets/example/room.jpg";
+import clean from "@/assets/example/clean.jpg";
+import botanical from "@/assets/landing/piece-1.jpg";
+import photograph from "@/assets/landing/piece-2.jpg";
+import print from "@/assets/landing/piece-3.jpg";
+import poster from "@/assets/landing/piece-4.jpg";
+import textile from "@/assets/landing/piece-6.jpg";
 
 // Priced per wall, since most people plan one wall at a time. Prices are placeholders until payments are in place.
 const plans = [
   {
     name: "One wall",
-    price: "$9",
-    featured: true,
+    price: "$3",
+    featured: false,
     items: [
       "Photos of as much art as you like",
       "Unlimited layouts",
@@ -28,11 +30,11 @@ const plans = [
     ],
   },
   {
-    name: "Three walls",
-    price: "$19",
+    name: "Whole home",
+    price: "$10",
     tag: "Moving in?",
-    featured: false,
-    items: ["Everything in One wall, for three walls", "Use them whenever you like", "Move art between walls"],
+    featured: true,
+    items: ["Everything in One wall", "Up to 10 walls, whenever you like", "Move art between walls"],
   },
 ];
 
@@ -69,9 +71,9 @@ function Logo() {
 const steps = [
   {
     title: "Snap your wall",
-    body: "Art leaning on the sofa is fine. Add photos of art from anywhere else in the house.",
+    body: "Leaning on a sideboard or the floor is fine. Add photos of art from anywhere else in the house.",
     image: before,
-    alt: "Photo of a wall with art leaning on the sofa",
+    alt: "A dining room with framed art leaning on the sideboard",
   },
   {
     title: "We clear the wall",
@@ -83,7 +85,7 @@ const steps = [
     title: "Shuffle until it clicks",
     body: "A new layout with every tap. Save the ones you like and flip between them.",
     image: after,
-    alt: "The art arranged on the wall above the sofa",
+    alt: "The art arranged on the wall above the sideboard",
   },
 ];
 
@@ -127,6 +129,9 @@ export default function Landing() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <Logo />
         <nav className="flex items-center gap-8 text-sm text-stone-600">
+          <a href="#try" className="hidden hover:text-stone-900 sm:block">
+            Try it
+          </a>
           <a href="#how" className="hidden hover:text-stone-900 sm:block">
             How it works
           </a>
@@ -150,10 +155,20 @@ export default function Landing() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-x-5 gap-y-3">
               <Cta />
-              <span className="text-sm text-stone-500">{plans[0].price} per wall · No subscription</span>
+              <span className="text-sm text-stone-500">From {plans[0].price} per wall · No subscription</span>
             </div>
           </div>
           <BeforeAfter before={before} after={after} />
+        </section>
+
+        <section id="try" className="mx-auto max-w-6xl scroll-mt-6 px-6 pb-24">
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+            <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Try it on our wall</h2>
+            <p className="text-stone-500">Press Random, drag the frames or turn on Measure.</p>
+          </div>
+          <div className="mt-8 h-[min(80vh,720px)] overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(41,37,36,0.5)] ring-1 ring-stone-900/10">
+            <Planner example={example} className="h-full" />
+          </div>
         </section>
 
         <section id="how" className="border-y border-stone-200 bg-white">
@@ -167,7 +182,7 @@ export default function Landing() {
                     {i === 1 && (
                       // The art found in the photo, collected in a tray like the planner's.
                       <div className="absolute inset-x-3 bottom-3 flex h-14 items-center justify-center gap-2 overflow-hidden rounded-lg bg-white/90 px-3 shadow-lg backdrop-blur">
-                        {[piece2, piece0, piece4, piece7, piece6].map((piece) => (
+                        {[botanical, photograph, print, poster, textile].map((piece) => (
                           <Image key={piece.src} src={piece} alt="" className="h-9 w-auto rounded-[2px] shadow ring-1 ring-black/5 sm:h-10" />
                         ))}
                       </div>
@@ -196,12 +211,7 @@ export default function Landing() {
               ))}
             </dl>
           </div>
-          <div className="overflow-hidden rounded-xl bg-white shadow-[0_30px_80px_-30px_rgba(41,37,36,0.5)] ring-1 ring-stone-900/10">
-            <div className="flex gap-1.5 border-b border-stone-200 px-4 py-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-              <span className="h-2.5 w-2.5 rounded-full bg-stone-300" />
-            </div>
+          <div className="overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(41,37,36,0.5)]">
             <Image src={appMeasure} alt="The planner showing a layout with every frame's size in centimetres" sizes="(min-width: 1024px) 60vw, 100vw" />
           </div>
         </section>
@@ -209,7 +219,7 @@ export default function Landing() {
         <section id="pricing" className="border-y border-stone-200 bg-white">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <div className="text-center">
-              <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Pay once per wall</h2>
+              <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Pay once. Hang it right.</h2>
               <p className="mt-4 text-lg text-stone-600">No subscription. Nothing to cancel.</p>
             </div>
             <div className="mx-auto mt-14 grid max-w-4xl gap-6 md:grid-cols-2">
