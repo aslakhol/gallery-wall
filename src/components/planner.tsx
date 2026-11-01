@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
 import { boxToPixels, toPixels, unwarp } from "@/lib/geometry";
 import { JOB_HEADER } from "@/lib/job";
@@ -37,7 +37,7 @@ type Wall = WallSpace & { photo: Photo };
 const MAX_EDGE = 2048;
 
 // Downscale before upload to stay well inside request size limits.
-async function preparePhoto(file: File) {
+async function preparePhoto(file: Blob) {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
@@ -56,6 +56,21 @@ async function post(path: string, body: Blob, jobId: string) {
   if (!response.ok) throw new Error(`${path} failed with ${response.status}`);
   return response;
 }
+
+// Finds the art and the wall in a photo, and produces the photo with the art removed.
+type Processor = (photo: Blob) => { analysis: Promise<PhotoAnalysis>; cleanUrl: Promise<string> };
+
+const viaApi =
+  (jobId: string): Processor =>
+  (photo) => ({
+    analysis: post("/api/analyze", photo, jobId).then((response) => response.json() as Promise<PhotoAnalysis>),
+    cleanUrl: post("/api/clean", photo, jobId)
+      .then((response) => response.blob())
+      .then((cleaned) => URL.createObjectURL(cleaned)),
+  });
+
+// A photo that has already been processed, for trying the planner without uploading anything.
+export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis };
 
 function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
   const surface = boxToPixels(wall.surface, width, height);
@@ -106,7 +121,7 @@ function shuffledLayout(pieces: Piece[], wall: Wall, current: Layout | undefined
   return Object.fromEntries(pieces.map((piece) => [piece.id, { ...positions[piece.id], scale: scaleOf(piece) }]));
 }
 
-export function Planner() {
+export function Planner({ example, className = "h-dvh" }: { example?: Example; className?: string }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [layouts, setLayouts] = useState<Record<string, Layout>>({});
@@ -120,43 +135,52 @@ export function Planner() {
   const updatePhoto = (id: string, patch: Partial<Photo>) =>
     setPhotos((all) => all.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
 
-  async function addPhoto(file: File) {
+  async function addPhoto(file: Blob, process: Processor) {
     const id = crypto.randomUUID();
-    const jobId = (jobIdRef.current ??= crypto.randomUUID());
     const { blob, width, height, pixels } = await preparePhoto(file);
     setPhotos((all) => [...all, { id, url: URL.createObjectURL(blob), width, height }]);
+    const processed = process(blob);
 
-    const analyze = post("/api/analyze", blob, jobId)
-      .then((response) => response.json() as Promise<PhotoAnalysis>)
-      .then((analysis) => {
-        updatePhoto(id, { analysis, wall: analysis.wall ? wallSpace(analysis.wall, width, height) : undefined });
-        const found = analysis.art.map((art): Piece => {
-          const quad = {
-            topLeft: toPixels(art.corners.topLeft, width, height),
-            topRight: toPixels(art.corners.topRight, width, height),
-            bottomRight: toPixels(art.corners.bottomRight, width, height),
-            bottomLeft: toPixels(art.corners.bottomLeft, width, height),
-          };
-          return {
-            id: crypto.randomUUID(),
-            label: art.label,
-            ...unwarp(pixels, quad),
-            longestCm: Math.max(art.widthCm, art.heightCm),
-            hidden: false,
-          };
-        });
-        setPieces((all) => [...all, ...found]);
+    const analyze = processed.analysis.then((analysis) => {
+      updatePhoto(id, { analysis, wall: analysis.wall ? wallSpace(analysis.wall, width, height) : undefined });
+      const found = analysis.art.map((art): Piece => {
+        const quad = {
+          topLeft: toPixels(art.corners.topLeft, width, height),
+          topRight: toPixels(art.corners.topRight, width, height),
+          bottomRight: toPixels(art.corners.bottomRight, width, height),
+          bottomLeft: toPixels(art.corners.bottomLeft, width, height),
+        };
+        return {
+          id: crypto.randomUUID(),
+          label: art.label,
+          ...unwarp(pixels, quad),
+          longestCm: Math.max(art.widthCm, art.heightCm),
+          hidden: false,
+        };
       });
+      setPieces((all) => [...all, ...found]);
+    });
 
-    const clean = post("/api/clean", blob, jobId)
-      .then((response) => response.blob())
-      .then((cleaned) => updatePhoto(id, { cleanUrl: URL.createObjectURL(cleaned) }));
+    const clean = processed.cleanUrl.then((cleanUrl) => updatePhoto(id, { cleanUrl }));
 
     await Promise.all([analyze, clean]).catch((error) => {
       console.error(error);
       updatePhoto(id, { failed: true });
     });
   }
+
+  // Load the example once (effects run twice in development).
+  const exampleLoaded = useRef(false);
+  useEffect(() => {
+    if (!example || exampleLoaded.current) return;
+    exampleLoaded.current = true;
+    void fetch(example.photo)
+      .then((response) => response.blob())
+      .then((photo) =>
+        addPhoto(photo, () => ({ analysis: Promise.resolve(example.analysis), cleanUrl: Promise.resolve(example.cleanUrl) })),
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the example is fixed for the planner's lifetime
+  }, []);
 
   const walls = photos.flatMap((photo): Wall[] => (photo.wall ? [{ ...photo.wall, photo }] : []));
   const activeWall =
@@ -242,7 +266,8 @@ export function Planner() {
       multiple
       hidden
       onChange={(event) => {
-        for (const file of event.target.files ?? []) void addPhoto(file);
+        const jobId = (jobIdRef.current ??= crypto.randomUUID());
+        for (const file of event.target.files ?? []) void addPhoto(file, viaApi(jobId));
         event.target.value = "";
       }}
     />
@@ -250,24 +275,28 @@ export function Planner() {
 
   if (photos.length === 0) {
     return (
-      <main className="flex h-dvh items-center justify-center bg-stone-100">
+      <main className={`flex items-center justify-center bg-stone-100 ${className}`}>
         {uploadInput}
-        <button
-          className="rounded-full bg-stone-900 px-8 py-4 text-lg font-medium text-white hover:bg-stone-700"
-          onClick={() => fileInput.current?.click()}
-        >
-          Upload photos
-        </button>
+        {example ? (
+          <Spinner className="h-8 w-8 text-stone-400" />
+        ) : (
+          <button
+            className="rounded-full bg-stone-900 px-8 py-4 text-lg font-medium text-white hover:bg-stone-700"
+            onClick={() => fileInput.current?.click()}
+          >
+            Upload photos
+          </button>
+        )}
       </main>
     );
   }
 
   return (
-    <main className="flex h-dvh flex-col bg-stone-100">
+    <main className={`flex flex-col bg-stone-100 ${className}`}>
       {uploadInput}
       <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2">
         <div className="mr-auto flex gap-2 overflow-x-auto">
-          {photos.map((photo) => {
+          {!example && photos.map((photo) => {
             const wall = walls.find((w) => w.photo.id === photo.id);
             const pending = !photo.failed && (!photo.analysis || (wall && !photo.cleanUrl));
             return (
@@ -324,12 +353,14 @@ export function Planner() {
         >
           Save
         </button>
-        <button
-          className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
-          onClick={() => fileInput.current?.click()}
-        >
-          Add photos
-        </button>
+        {!example && (
+          <button
+            className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
+            onClick={() => fileInput.current?.click()}
+          >
+            Add photos
+          </button>
+        )}
         <button
           aria-pressed={showMeasurements}
           className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-40 ${
