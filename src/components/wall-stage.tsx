@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { WallSpace } from "@/lib/layout";
 import { trackPointer } from "./track-pointer";
-import { WallGuides } from "./wall-guides";
+import { FramePosition, WallGuides } from "./wall-guides";
 
 export type StageItem = {
   id: string;
@@ -19,7 +19,7 @@ export type StageItem = {
 type Change = { x?: number; y?: number; scale?: number };
 
 // Shows the wall photo at its natural pixel size, scaled to fit, with draggable and resizable pieces on top.
-// With measurements on, it also shows the wall guides and every piece's size in cm.
+// With measurements on, it also shows the wall guides, every piece's size in cm and where the selected piece goes.
 export function WallStage({
   image,
   width,
@@ -53,6 +53,8 @@ export function WallStage({
     observer.observe(container);
     return () => observer.disconnect();
   }, [width, height]);
+
+  const selected = items.find((item) => item.id === selectedId);
 
   function startDrag(event: ReactPointerEvent, item: StageItem) {
     setSelectedId(item.id);
@@ -129,6 +131,7 @@ export function WallStage({
             </div>
           ))}
           {showMeasurements && <WallGuides wall={wall} zoom={zoom} onChange={onWallChange} />}
+          {showMeasurements && selected && <FramePosition frame={selected} wall={wall} zoom={zoom} />}
         </div>
       )}
     </div>

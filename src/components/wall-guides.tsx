@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { WallSpace } from "@/lib/layout";
 import { trackPointer } from "./track-pointer";
 
@@ -136,5 +137,90 @@ function CmField({
       />
       cm
     </label>
+  );
+}
+
+// Where a frame goes, measured the way you'd mark it on the wall: the height of its top edge above
+// the hang-above line, and how far its centre is from the line's centre.
+export function FramePosition({
+  frame,
+  wall,
+  zoom,
+}: {
+  frame: { x: number; y: number; width: number; height: number };
+  wall: WallSpace;
+  zoom: number;
+}) {
+  const { hangAbove, pxPerCm } = wall;
+  const px = (n: number) => n / zoom;
+  const frameCenter = frame.x + frame.width / 2;
+  const lineCenter = (hangAbove.left + hangAbove.right) / 2;
+  const height = Math.round((hangAbove.top - frame.y) / pxPerCm);
+  const offset = Math.round(Math.abs(frameCenter - lineCenter) / pxPerCm);
+  const side = frameCenter < lineCenter ? "left of centre" : "right of centre";
+
+  return (
+    <div className="pointer-events-none absolute inset-0" style={{ zIndex: 10_001 }}>
+      <div
+        className="absolute border-sky-500"
+        style={{
+          left: frameCenter,
+          top: Math.min(frame.y, hangAbove.top),
+          height: Math.abs(hangAbove.top - frame.y),
+          borderLeftWidth: px(2),
+          borderLeftStyle: "dashed",
+        }}
+      />
+      {/* In the gap under the frame, beside the line, so it doesn't cover the frame's size. */}
+      <Pill x={frameCenter + px(6)} y={(frame.y + frame.height + hangAbove.top) / 2 - px(8)} zoom={zoom} align="left">
+        Top edge {height} cm up
+      </Pill>
+      {offset > 0 && (
+        <>
+          <div
+            className="absolute border-sky-500"
+            style={{
+              left: Math.min(frameCenter, lineCenter),
+              top: hangAbove.top - px(10),
+              width: Math.abs(frameCenter - lineCenter),
+              borderTopWidth: px(2),
+              borderTopStyle: "dashed",
+            }}
+          />
+          <Pill x={(frameCenter + lineCenter) / 2} y={hangAbove.top - px(10)} zoom={zoom}>
+            {offset} cm {side}
+          </Pill>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Pill({
+  x,
+  y,
+  zoom,
+  align = "center",
+  children,
+}: {
+  x: number;
+  y: number;
+  zoom: number;
+  align?: "center" | "left";
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className="absolute whitespace-nowrap rounded bg-sky-600 font-medium text-white shadow"
+      style={{
+        left: x,
+        top: y,
+        transform: align === "center" ? "translate(-50%, -50%)" : "translateY(-50%)",
+        fontSize: 12 / zoom,
+        padding: `${1 / zoom}px ${6 / zoom}px`,
+      }}
+    >
+      {children}
+    </span>
   );
 }
