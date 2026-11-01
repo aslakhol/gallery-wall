@@ -2,39 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
-import { boxToPixels, toPixels, unwarp, type Point } from "@/lib/geometry";
-import { JOB_HEADER } from "@/lib/job";
+import { boxToPixels, toPixels, unwarp } from "@/lib/geometry";
 import { randomLayout, type WallSpace } from "@/lib/layout";
+import {
+  emptyPlanState,
+  isProcessing,
+  type Layout,
+  type PlanData,
+  type PlanState,
+  type Placement,
+  type SavedLayout,
+  type StoredPhoto,
+} from "@/lib/plan";
 import { WallStage, type StageItem } from "./wall-stage";
 
-type Photo = {
-  id: string;
-  url: string;
-  width: number;
-  height: number;
-  analysis?: PhotoAnalysis;
-  // The analyzed wall in pixels, which the user can correct.
-  wall?: WallSpace;
-  cleanUrl?: string;
-  failed?: boolean;
-};
+type Crop = { url: string; aspect: number };
 
-type Piece = {
+type Piece = Crop & {
   id: string;
   label: string;
-  url: string;
-  aspect: number;
   longestCm: number;
   hidden: boolean;
 };
 
-type Placement = { x: number; y: number; scale: number };
-type Layout = Record<string, Placement>;
-type SavedLayout = { id: string; layout: Layout; visibleIds: string[] };
-
-type Wall = WallSpace & { photo: Photo };
+type Wall = WallSpace & { photo: StoredPhoto };
 
 const MAX_EDGE = 2048;
+const POLL_MS = 2000;
+const SAVE_DELAY_MS = 600;
 
 // Downscale before upload to stay well inside request size limits.
 async function preparePhoto(file: Blob) {
@@ -43,37 +38,36 @@ async function preparePhoto(file: Blob) {
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not encode photo"))), "image/jpeg", 0.9),
   );
-  return { blob, width: canvas.width, height: canvas.height, pixels: ctx.getImageData(0, 0, canvas.width, canvas.height) };
+  return { blob, width: canvas.width, height: canvas.height };
 }
 
-async function post(path: string, body: Blob, jobId: string) {
-  const response = await fetch(path, { method: "POST", body, headers: { "Content-Type": body.type, [JOB_HEADER]: jobId } });
+async function request(path: string, init?: RequestInit) {
+  const response = await fetch(path, init);
   if (!response.ok) throw new Error(`${path} failed with ${response.status}`);
   return response;
 }
 
-// Finds the art and the wall in a photo, and produces the photo with the art removed.
-type Processor = (photo: Blob) => { analysis: Promise<PhotoAnalysis>; cleanUrl: Promise<string> };
+// Cut each piece of art out of the photo. Crops are recreated on every load rather than stored.
+async function cropArt(photo: StoredPhoto, analysis: PhotoAnalysis): Promise<Crop[]> {
+  const bitmap = await createImageBitmap(await (await request(photo.url)).blob());
+  const ctx = Object.assign(document.createElement("canvas"), { width: photo.width, height: photo.height }).getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, photo.width, photo.height);
+  const pixels = ctx.getImageData(0, 0, photo.width, photo.height);
+  return analysis.art.map(({ corners }) =>
+    unwarp(pixels, {
+      topLeft: toPixels(corners.topLeft, photo.width, photo.height),
+      topRight: toPixels(corners.topRight, photo.width, photo.height),
+      bottomRight: toPixels(corners.bottomRight, photo.width, photo.height),
+      bottomLeft: toPixels(corners.bottomLeft, photo.width, photo.height),
+    }),
+  );
+}
 
-const viaApi =
-  (jobId: string): Processor =>
-  (photo) => ({
-    analysis: post("/api/analyze", photo, jobId).then((response) => response.json() as Promise<PhotoAnalysis>),
-    cleanUrl: post("/api/clean", photo, jobId)
-      .then((response) => response.blob())
-      .then((cleaned) => URL.createObjectURL(cleaned)),
-  });
-
-// A photo that has already been processed, for trying the planner without uploading anything.
-// `layout` is where it starts: the top-left corner of each piece by label, in the analysis' 0–1000 coordinates.
-// Art left out starts in the tray, off the wall.
-type StartLayout = Record<string, Point>;
-export type Example = { photo: string; cleanUrl: string; analysis: PhotoAnalysis; layout: StartLayout };
+const pieceId = (photoId: string, index: number) => `${photoId}:${index}`;
 
 function wallSpace(wall: NonNullable<PhotoAnalysis["wall"]>, width: number, height: number): WallSpace {
   const surface = boxToPixels(wall.surface, width, height);
@@ -124,79 +118,102 @@ function shuffledLayout(pieces: Piece[], wall: Wall, current: Layout | undefined
   return Object.fromEntries(pieces.map((piece) => [piece.id, { ...positions[piece.id], scale: scaleOf(piece) }]));
 }
 
-export function Planner({ example, className = "h-dvh" }: { example?: Example; className?: string }) {
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [pieces, setPieces] = useState<Piece[]>([]);
-  const [layouts, setLayouts] = useState<Record<string, Layout>>({});
-  const [chosenWallId, setChosenWallId] = useState<string>();
-  const [saved, setSaved] = useState<Record<string, SavedLayout[]>>({});
+const emptyPlan: PlanData = { id: null, photos: [], state: emptyPlanState };
+
+// A plan is saved as you go once it has an id. The demo plan is never saved and takes no uploads.
+export function Planner({
+  initial = emptyPlan,
+  demo = false,
+  className = "h-dvh",
+}: {
+  initial?: PlanData;
+  demo?: boolean;
+  className?: string;
+}) {
+  const [planId, setPlanId] = useState(initial.id);
+  const [photos, setPhotos] = useState(initial.photos);
+  const [uploading, setUploading] = useState(0);
+  const [crops, setCrops] = useState<Record<string, Crop[]>>({});
+  const [wallEdits, setWallEdits] = useState(initial.state.walls);
+  const [layouts, setLayouts] = useState(initial.state.layouts);
+  const [saved, setSaved] = useState(initial.state.saved);
+  const [hidden, setHidden] = useState(initial.state.hidden);
+  const [chosenWallId, setChosenWallId] = useState(initial.state.chosenWallId);
   const [showMeasurements, setShowMeasurements] = useState(false);
   // New layout pulses until it's first pressed, since it's the main thing to do.
   const [hasShuffled, setHasShuffled] = useState(false);
-  // One job per planning session, started by the first upload; AI costs are reported per job.
-  const jobIdRef = useRef<string>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const updatePhoto = (id: string, patch: Partial<Photo>) =>
-    setPhotos((all) => all.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
-
-  async function addPhoto(file: Blob, process: Processor, start?: StartLayout) {
-    const id = crypto.randomUUID();
-    const { blob, width, height, pixels } = await preparePhoto(file);
-    setPhotos((all) => [...all, { id, url: URL.createObjectURL(blob), width, height }]);
-    const processed = process(blob);
-
-    const analyze = processed.analysis.then((analysis) => {
-      updatePhoto(id, { analysis, wall: analysis.wall ? wallSpace(analysis.wall, width, height) : undefined });
-      const found = analysis.art.map((art): Piece => {
-        const quad = {
-          topLeft: toPixels(art.corners.topLeft, width, height),
-          topRight: toPixels(art.corners.topRight, width, height),
-          bottomRight: toPixels(art.corners.bottomRight, width, height),
-          bottomLeft: toPixels(art.corners.bottomLeft, width, height),
-        };
-        return {
-          id: crypto.randomUUID(),
-          label: art.label,
-          ...unwarp(pixels, quad),
-          longestCm: Math.max(art.widthCm, art.heightCm),
-          hidden: !!start && !(art.label in start),
-        };
-      });
-      setPieces((all) => [...all, ...found]);
-      if (start) {
-        const placed = found.filter((piece) => piece.label in start);
-        const layout = placed.map((piece) => [piece.id, { ...toPixels(start[piece.label], width, height), scale: 1 }]);
-        setLayouts((all) => ({ ...all, [id]: Object.fromEntries(layout) }));
-      }
-    });
-
-    const clean = processed.cleanUrl.then((cleanUrl) => updatePhoto(id, { cleanUrl }));
-
-    await Promise.all([analyze, clean]).catch((error) => {
-      console.error(error);
-      updatePhoto(id, { failed: true });
-    });
+  // The first upload creates the plan, and the address becomes the plan's so a reload brings it back.
+  async function ensurePlan() {
+    if (planId) return planId;
+    const { id } = (await (await request("/api/plans", { method: "POST" })).json()) as { id: string };
+    setPlanId(id);
+    window.history.replaceState(null, "", `/p/${id}`);
+    return id;
   }
 
-  // Load the example once (effects run twice in development).
-  const exampleLoaded = useRef(false);
-  useEffect(() => {
-    if (!example || exampleLoaded.current) return;
-    exampleLoaded.current = true;
-    void fetch(example.photo)
-      .then((response) => response.blob())
-      .then((photo) =>
-        addPhoto(
-          photo,
-          () => ({ analysis: Promise.resolve(example.analysis), cleanUrl: Promise.resolve(example.cleanUrl) }),
-          example.layout,
-        ),
-      );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the example is fixed for the planner's lifetime
-  }, []);
+  async function upload(files: File[]) {
+    setUploading((n) => n + files.length);
+    const id = await ensurePlan().catch((error) => {
+      console.error(error);
+      setUploading((n) => n - files.length);
+    });
+    if (!id) return;
+    await Promise.all(
+      files.map(async (file) => {
+        try {
+          const { blob, width, height } = await preparePhoto(file);
+          const response = await request(`/api/plans/${id}/photos?width=${width}&height=${height}`, {
+            method: "POST",
+            body: blob,
+            headers: { "Content-Type": blob.type },
+          });
+          const photo = (await response.json()) as StoredPhoto;
+          setPhotos((all) => (all.some((p) => p.id === photo.id) ? all : [...all, photo]));
+        } catch (error) {
+          console.error(error);
+        } finally {
+          setUploading((n) => n - 1);
+        }
+      }),
+    );
+  }
 
-  const walls = photos.flatMap((photo): Wall[] => (photo.wall ? [{ ...photo.wall, photo }] : []));
+  // Photos are processed on the server; check back until every one is done.
+  const processing = photos.some(isProcessing);
+  useEffect(() => {
+    if (!planId || !processing) return;
+    const timer = setInterval(async () => {
+      const plan = (await (await request(`/api/plans/${planId}`)).json()) as PlanData;
+      setPhotos(plan.photos);
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [planId, processing]);
+
+  const cropping = useRef(new Set<string>());
+  useEffect(() => {
+    for (const photo of photos) {
+      const { analysis } = photo;
+      if (!analysis || cropping.current.has(photo.id)) continue;
+      cropping.current.add(photo.id);
+      void cropArt(photo, analysis).then((photoCrops) => setCrops((all) => ({ ...all, [photo.id]: photoCrops })));
+    }
+  }, [photos]);
+
+  const pieces = photos.flatMap((photo) => {
+    const photoCrops = crops[photo.id];
+    if (!photo.analysis || !photoCrops) return [];
+    return photo.analysis.art.map((art, i): Piece => {
+      const id = pieceId(photo.id, i);
+      return { id, label: art.label, ...photoCrops[i], longestCm: Math.max(art.widthCm, art.heightCm), hidden: hidden.includes(id) };
+    });
+  });
+
+  const walls = photos.flatMap((photo): Wall[] => {
+    const wall = wallEdits[photo.id] ?? (photo.analysis?.wall && wallSpace(photo.analysis.wall, photo.width, photo.height));
+    return wall ? [{ ...wall, photo }] : [];
+  });
   const activeWall =
     walls.find((wall) => wall.photo.id === chosenWallId) ?? walls.find((wall) => wall.photo.cleanUrl) ?? walls[0];
   const visiblePieces = pieces.filter((piece) => !piece.hidden);
@@ -212,6 +229,36 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   );
   const layout = autoLayout ?? storedLayout ?? {};
 
+  // Save shortly after each change, and right away when the page goes away. The layout on the wall
+  // is included even when it was generated rather than touched, so a reload shows the same one.
+  const planState: PlanState = {
+    walls: wallEdits,
+    layouts: activeWall ? { ...layouts, [activeWall.photo.id]: layout } : layouts,
+    saved,
+    hidden,
+    chosenWallId,
+  };
+  const stateJson = JSON.stringify(planState);
+  const savedJson = useRef(JSON.stringify(initial.state));
+  useEffect(() => {
+    if (!planId || demo || stateJson === savedJson.current) return;
+    const save = () => {
+      savedJson.current = stateJson;
+      void fetch(`/api/plans/${planId}`, {
+        method: "PUT",
+        body: stateJson,
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+      }).catch(console.error);
+    };
+    const timer = setTimeout(save, SAVE_DELAY_MS);
+    window.addEventListener("pagehide", save);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pagehide", save);
+    };
+  }, [planId, demo, stateJson]);
+
   function shuffle() {
     if (!activeWall) return;
     setHasShuffled(true);
@@ -224,7 +271,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   }
 
   const toggleHidden = (id: string) =>
-    setPieces((all) => all.map((piece) => (piece.id === id ? { ...piece, hidden: !piece.hidden } : piece)));
+    setHidden((all) => (all.includes(id) ? all.filter((other) => other !== id) : [...all, id]));
 
   const savedLayouts = (activeWall && saved[activeWall.photo.id]) ?? [];
 
@@ -239,7 +286,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   function restoreLayout(entry: SavedLayout) {
     if (!activeWall) return;
     setLayouts((all) => ({ ...all, [activeWall.photo.id]: entry.layout }));
-    setPieces((all) => all.map((piece) => ({ ...piece, hidden: !entry.visibleIds.includes(piece.id) })));
+    setHidden(pieces.filter((piece) => !entry.visibleIds.includes(piece.id)).map((piece) => piece.id));
   }
 
   function changeWall(wall: WallSpace) {
@@ -254,7 +301,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
       setSaved((all) => ({ ...all, [wallId]: rescaledSaved }));
       setLayouts((all) => ({ ...all, [wallId]: savedIndex >= 0 ? rescaledSaved[savedIndex].layout : rescale(layout) }));
     }
-    updatePhoto(wallId, { wall });
+    setWallEdits((all) => ({ ...all, [wallId]: wall }));
   }
 
   function deleteLayout(id: string) {
@@ -272,7 +319,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
   const stageItems = activeWall ? itemsFor(activeWall, layout, visiblePieces) : [];
 
   const canShuffle = !!activeWall?.photo.cleanUrl && visiblePieces.length > 0;
-  const processing = photos.some((photo) => !photo.failed && (!photo.analysis || !photo.cleanUrl));
+  const busy = processing || uploading > 0;
 
   const uploadInput = (
     <input
@@ -282,8 +329,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
       multiple
       hidden
       onChange={(event) => {
-        const jobId = (jobIdRef.current ??= crypto.randomUUID());
-        for (const file of event.target.files ?? []) void addPhoto(file, viaApi(jobId));
+        void upload([...(event.target.files ?? [])]);
         event.target.value = "";
       }}
     />
@@ -293,7 +339,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
     return (
       <main className={`flex items-center justify-center bg-stone-100 ${className}`}>
         {uploadInput}
-        {example ? (
+        {demo || uploading > 0 ? (
           <Spinner className="h-8 w-8 text-stone-400" />
         ) : (
           <button
@@ -312,9 +358,9 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
       {uploadInput}
       <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-2">
         <div className="mr-auto flex gap-2 overflow-x-auto">
-          {!example && photos.map((photo) => {
+          {!demo && photos.map((photo) => {
             const wall = walls.find((w) => w.photo.id === photo.id);
-            const pending = !photo.failed && (!photo.analysis || (wall && !photo.cleanUrl));
+            const pending = isProcessing(photo);
             return (
               <button
                 key={photo.id}
@@ -325,13 +371,18 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
                   activeWall?.photo.id === photo.id ? "ring-blue-500" : "ring-transparent"
                 } ${wall || pending ? "" : "opacity-40"}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- stored photo */}
                 <img src={photo.cleanUrl ?? photo.url} alt="" className="h-full w-full object-cover" />
                 {pending && <Spinner className="absolute inset-0 m-auto h-5 w-5 text-white" />}
                 {photo.failed && <span className="absolute inset-0 bg-red-500/50" />}
               </button>
             );
           })}
+          {Array.from({ length: uploading }, (_, i) => (
+            <div key={i} className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-stone-200">
+              <Spinner className="h-5 w-5 text-stone-500" />
+            </div>
+          ))}
         </div>
         {activeWall?.photo.cleanUrl && savedLayouts.length > 0 && (
           // Newer layouts extend to the left, away from the buttons.
@@ -369,7 +420,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
         >
           Save
         </button>
-        {!example && (
+        {!demo && (
           <button
             className="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50"
             onClick={() => fileInput.current?.click()}
@@ -414,7 +465,7 @@ export function Planner({ example, className = "h-dvh" }: { example?: Example; c
           />
         ) : (
           <div className="flex h-full items-center justify-center text-stone-400">
-            {processing ? <Spinner className="h-8 w-8" /> : "No wall found"}
+            {busy ? <Spinner className="h-8 w-8" /> : "No wall found"}
           </div>
         )}
       </section>
@@ -447,7 +498,7 @@ function LayoutPreview({ wall, image, items }: { wall: Wall; image: string; item
   return (
     <div className="relative overflow-hidden" style={{ width: wall.photo.width * scale, height: PREVIEW_HEIGHT }}>
       <div className="absolute left-0 top-0 origin-top-left" style={{ width: wall.photo.width, height: wall.photo.height, transform: `scale(${scale})` }}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- stored photo */}
         <img src={image} alt="" className="absolute inset-0 h-full w-full" />
         {items.map((item) => (
           // eslint-disable-next-line @next/next/no-img-element -- generated data URL

@@ -7,9 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "costs": "node --env-file-if-exists=.env.local scripts/costs.mts"
+    "costs": "node --env-file-if-exists=.env.local scripts/costs.mts",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@vercel/blob": "^2.8.2",
     "ai": "^7.0.159",
     "next": "16.4.3",
     "react": "19.3.0",

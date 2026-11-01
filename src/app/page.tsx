@@ -164,7 +164,7 @@ export default function Landing() {
         <section id="try" className="mx-auto max-w-6xl scroll-mt-6 px-6 pb-24">
           <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Try it on our wall</h2>
           <div className="mt-8 h-[min(80vh,720px)] overflow-hidden rounded-2xl shadow-[0_30px_80px_-30px_rgba(41,37,36,0.5)] ring-1 ring-stone-900/10">
-            <Planner example={example} className="h-full" />
+            <Planner initial={example} demo className="h-full" />
           </div>
         </section>
 
