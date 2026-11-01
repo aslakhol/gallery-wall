@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
 import { boxToPixels, toPixels, unwarp, type Box } from "@/lib/geometry";
+import { JOB_HEADER } from "@/lib/job";
 import { randomLayout } from "@/lib/layout";
 import { WallStage, type StageItem } from "./wall-stage";
 
@@ -47,8 +48,8 @@ async function preparePhoto(file: File) {
   return { blob, width: canvas.width, height: canvas.height, pixels: ctx.getImageData(0, 0, canvas.width, canvas.height) };
 }
 
-async function post(path: string, body: Blob) {
-  const response = await fetch(path, { method: "POST", body, headers: { "Content-Type": body.type } });
+async function post(path: string, body: Blob, jobId: string) {
+  const response = await fetch(path, { method: "POST", body, headers: { "Content-Type": body.type, [JOB_HEADER]: jobId } });
   if (!response.ok) throw new Error(`${path} failed with ${response.status}`);
   return response;
 }
@@ -83,6 +84,8 @@ export function Planner() {
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [layouts, setLayouts] = useState<Record<string, Layout>>({});
   const [chosenWallId, setChosenWallId] = useState<string>();
+  // One job per planning session, started by the first upload; AI costs are reported per job.
+  const jobIdRef = useRef<string>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const updatePhoto = (id: string, patch: Partial<Photo>) =>
@@ -90,10 +93,11 @@ export function Planner() {
 
   async function addPhoto(file: File) {
     const id = crypto.randomUUID();
+    const jobId = (jobIdRef.current ??= crypto.randomUUID());
     const { blob, width, height, pixels } = await preparePhoto(file);
     setPhotos((all) => [...all, { id, url: URL.createObjectURL(blob), width, height }]);
 
-    const analyze = post("/api/analyze", blob)
+    const analyze = post("/api/analyze", blob, jobId)
       .then((response) => response.json() as Promise<PhotoAnalysis>)
       .then((analysis) => {
         updatePhoto(id, { analysis });
@@ -115,7 +119,7 @@ export function Planner() {
         setPieces((all) => [...all, ...found]);
       });
 
-    const clean = post("/api/clean", blob)
+    const clean = post("/api/clean", blob, jobId)
       .then((response) => response.blob())
       .then((cleaned) => updatePhoto(id, { cleanUrl: URL.createObjectURL(cleaned) }));
 

@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { jobTracking } from "./job";
 
 const IMAGE_EDIT_MODEL = "google/gemini-nano-banana-2.1";
 
@@ -6,9 +7,10 @@ const PROMPT = `Edit this photo: remove every framed picture, poster, painting a
 
 Keep everything else exactly as it is: same camera position, framing, perspective, lighting, colours, furniture and image proportions. Do not add anything.`;
 
-export async function cleanWall(image: Uint8Array) {
+export async function cleanWall(image: Uint8Array, jobId: string) {
   const { files } = await generateText({
     model: IMAGE_EDIT_MODEL,
+    providerOptions: jobTracking(jobId, "clean"),
     messages: [
       {
         role: "user",

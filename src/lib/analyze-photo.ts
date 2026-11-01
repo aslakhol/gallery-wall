@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { jobTracking } from "./job";
 
 const ANALYZE_MODEL = "google/gemini-3.8-flash";
 
@@ -44,9 +45,10 @@ Estimate each frame's real outer size in cm. Use objects of known size in the ph
 
 If the photo shows a wall that art could be hung on, give the empty area where a gallery wall would naturally go and estimate its real width in cm.`;
 
-export async function analyzePhoto(image: Uint8Array) {
+export async function analyzePhoto(image: Uint8Array, jobId: string) {
   const { output } = await generateText({
     model: ANALYZE_MODEL,
+    providerOptions: jobTracking(jobId, "analyze"),
     output: Output.object({ schema: analysisSchema }),
     messages: [
       {

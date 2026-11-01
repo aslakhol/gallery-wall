@@ -22,3 +22,15 @@ pnpm dev
 ```
 
 On Vercel, AI Gateway authenticates automatically through the project's OIDC token.
+
+## Costs
+
+Every AI Gateway request is tagged with the job it belongs to (one planning session, starting at the first upload) and its step (`analyze` or `clean`). Gateway records the cost, so nothing is stored here. To see spend per job:
+
+```sh
+pnpm costs      # last 30 days
+pnpm costs 7    # last 7 days
+```
+
+Gateway's per-job report can lag a few minutes behind.
+
