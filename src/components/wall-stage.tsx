@@ -66,16 +66,6 @@ export function WallStage({
     trackPointer(event, zoom, (dx) => onChange(item.id, { scale: Math.max(0.1, item.scale * (1 + dx / item.width)) }));
   }
 
-  // Scroll over a piece to resize it around its center.
-  function wheelResize(event: React.WheelEvent, item: StageItem) {
-    const factor = event.deltaY < 0 ? 1.04 : 1 / 1.04;
-    onChange(item.id, {
-      scale: item.scale * factor,
-      x: item.x - (item.width * (factor - 1)) / 2,
-      y: item.y - (item.height * (factor - 1)) / 2,
-    });
-  }
-
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden" onPointerDown={() => setSelectedId(undefined)}>
       {zoom > 0 && (
@@ -97,7 +87,6 @@ export function WallStage({
                 zIndex: stackOrder.indexOf(item.id) + 1,
               }}
               onPointerDown={(e) => startDrag(e, item)}
-              onWheel={(e) => wheelResize(e, item)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- generated data URL */}
               <img
