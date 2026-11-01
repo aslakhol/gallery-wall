@@ -2,8 +2,9 @@ import type { Box, Point } from "./geometry";
 
 type Item = { id: string; width: number; height: number };
 
-// What the layout needs to know about the wall, in wall pixels.
-export type WallSpace = { surface: Box; furniture: Box | null; pxPerCm: number };
+// What the layout needs to know about the wall, in wall pixels. Furniture is the back edge where it meets the wall.
+export type FurnitureEdge = { left: number; right: number; top: number };
+export type WallSpace = { surface: Box; furniture: FurnitureEdge | null; pxPerCm: number };
 
 const ABOVE_FURNITURE_CM = 20;
 const BELOW_CEILING_CM = 15;
@@ -29,7 +30,7 @@ function tallestInMiddle(row: Item[]) {
   return result;
 }
 
-// Rows of pieces with an even gap and a shared vertical alignment per row.
+// Rows of pieces with a shared vertical alignment per row, spread to equal width so the cluster has straight sides.
 // Above furniture, the cluster aims for roughly the furniture's width, centered over it, and never drops into it.
 // Positions are top-left corners in wall pixels.
 export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: WallSpace): Record<string, Point> {
@@ -73,18 +74,22 @@ export function randomLayout(items: Item[], { surface, furniture, pxPerCm }: Wal
 
   const height = clusterHeight(rows);
   let y = Math.max(top, furnitureLimit ? furnitureLimit - height : eyeLevel - height / 2);
+  const width = Math.max(...rows.map(rowWidth));
   // Shift sideways to stay within the wall's edges when the furniture sits off-center.
-  const halfWidth = Math.max(...rows.map(rowWidth)) / 2;
-  const clusterCenter = Math.min(Math.max(centerX, surface.left + halfWidth), surface.right - halfWidth);
+  const clusterCenter = Math.min(Math.max(centerX, surface.left + width / 2), surface.right - width / 2);
 
   const positions: Record<string, Point> = {};
   for (const row of rows) {
     const h = rowHeight(row);
-    let x = clusterCenter - rowWidth(row) / 2;
+    // Widen the gaps to match the widest row, unless that would leave the row looking sparse.
+    const itemsWidth = row.reduce((sum, item) => sum + item.width, 0);
+    const spreadGap = row.length > 1 ? (width - itemsWidth) / (row.length - 1) : Infinity;
+    const rowGap = spreadGap <= gap * 2.5 ? spreadGap : gap;
+    let x = clusterCenter - (itemsWidth + rowGap * (row.length - 1)) / 2;
     for (const item of row) {
       const offset = { top: 0, center: (h - item.height) / 2, bottom: h - item.height }[align];
       positions[item.id] = { x, y: y + offset };
-      x += item.width + gap;
+      x += item.width + rowGap;
     }
     y += h + gap;
   }

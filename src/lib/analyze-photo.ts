@@ -28,12 +28,15 @@ const analysisSchema = z.object({
   wall: z
     .object({
       surface: box.describe(
-        "The free wall surface around where art would hang: from just below the ceiling down to the top of the furniture (or the floor if there is none), between the wall's edges or obstacles like windows and doors",
+        "The free surface of the main wall facing the camera: from just below the ceiling down to the top of the furniture (or the floor if there is none). Stop at corners where another wall begins, and at windows and doors",
       ),
       surfaceWidthCm: z.number().describe("Estimated real width of surface in cm"),
-      furniture: box
+      furniture: z
+        .object({ left: z.number(), right: z.number(), top: z.number() })
         .nullable()
-        .describe("The sofa, sideboard, bed or desk against this wall that a gallery wall would hang above, if any"),
+        .describe(
+          "Where the top of the sofa, sideboard, bed or desk against this wall meets the wall: the left and right ends of its back edge and its height. Only the part along this wall, e.g. not the chaise of a corner sofa reaching towards the camera",
+        ),
     })
     .nullable()
     .describe("null if the photo doesn't show a wall that art could be hung on"),
@@ -43,12 +46,12 @@ export type PhotoAnalysis = z.infer<typeof analysisSchema>;
 
 const PROMPT = `You are helping someone plan a gallery wall.
 
-Find every framed picture, poster, painting or print in this photo, wherever it is: hanging, leaning against the wall, standing on furniture or lying on the floor.
+Find every framed picture, poster, painting or print in this photo, wherever it is: hanging, leaning against the wall, standing on furniture or lying on the floor. Windows, mirrors, screens, packaging, boxes and loose papers are not art.
 Return the four outer corners of each in the photo, in 0–1000 normalized coordinates (x from the left edge, y from the top edge). Follow the frame's real outline, including perspective.
 
 Estimate each frame's real outer size in cm. Use objects of known size in the photo (sockets, doors, sofas, chairs, floorboards) for scale. Most frames come in standard sizes (13×18, 18×24, 21×30, 24×30, 30×40, 40×50, 50×70, 60×80, 70×100 and their landscape versions, plus square 30×30, 40×40, 50×50) — snap to the closest standard size unless the frame is clearly custom.
 
-If the photo shows a wall that art could be hung on, give its free surface, its real width in cm, and the furniture against it, if any.`;
+If the photo shows a wall that art could be hung on, give its free surface, its real width in cm, and the back edge of the furniture against it, if any.`;
 
 export async function analyzePhoto(image: Uint8Array, jobId: string) {
   const { output } = await generateText({

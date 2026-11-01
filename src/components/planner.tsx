@@ -58,7 +58,11 @@ function toWall(photo: Photo): Wall | undefined {
   const wall = photo.analysis?.wall;
   if (!wall) return undefined;
   const surface = boxToPixels(wall.surface, photo.width, photo.height);
-  const furniture = wall.furniture && boxToPixels(wall.furniture, photo.width, photo.height);
+  const furniture = wall.furniture && {
+    left: (wall.furniture.left / 1000) * photo.width,
+    right: (wall.furniture.right / 1000) * photo.width,
+    top: (wall.furniture.top / 1000) * photo.height,
+  };
   return { photo, surface, furniture, pxPerCm: (surface.right - surface.left) / wall.surfaceWidthCm };
 }
 
