@@ -53,18 +53,24 @@ export function randomLayout(items: Item[], { surface, hangAbove, pxPerCm }: Wal
     return rows.filter((row) => row.length > 0);
   }
 
-  // Pick between the two fewest row counts (from two rows up) that fit on the wall.
-  const options = Array.from({ length: items.length }, (_, i) => balancedRows(i + 1)).filter(
-    (rows) => rows.length >= Math.min(2, items.length),
+  const arrangements = Array.from({ length: items.length }, (_, i) => balancedRows(i + 1));
+  const widthOverflow = (rows: Item[][]) => Math.max(...rows.map(rowWidth)) / surfaceWidth - 1;
+  const heightOverflow = (rows: Item[][]) => clusterHeight(rows) / Math.max(availableHeight, 1) - 1;
+  // Pick between the two fewest row counts (from two rows up) that fit on the wall,
+  // or the closest fit when none do.
+  const fitting = arrangements.filter(
+    (rows) => rows.length >= Math.min(2, items.length) && widthOverflow(rows) <= 0 && heightOverflow(rows) <= 0,
   );
-  const fitting = options.filter(
-    (rows) => Math.max(...rows.map(rowWidth)) <= surfaceWidth && clusterHeight(rows) <= availableHeight,
-  );
-  const chosen = fitting.length > 0 ? pick(fitting.slice(0, 2)) : options.at(-1)!;
+  const misfit = (rows: Item[][]) => Math.max(0, widthOverflow(rows)) + Math.max(0, heightOverflow(rows));
+  const chosen =
+    fitting.length > 0
+      ? pick(fitting.slice(0, 2))
+      : arrangements.reduce((best, rows) => (misfit(rows) < misfit(best) ? rows : best));
   const rows = chosen.map((row) => (Math.random() < 0.5 ? tallestInMiddle(row) : shuffle(row)));
 
   const height = clusterHeight(rows);
-  let y = Math.max(top, bottom - height);
+  // Never below the line; when nothing fits, the cluster runs past the top instead.
+  let y = bottom - height;
   const width = Math.max(...rows.map(rowWidth));
   // Shift sideways to stay within the wall's edges when the line sits off-center.
   const clusterCenter = Math.min(Math.max(centerX, surface.left + width / 2), surface.right - width / 2);
