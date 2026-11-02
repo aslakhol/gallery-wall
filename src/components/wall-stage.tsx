@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { WallSpace } from "@/lib/layout";
 import { trackPointer } from "./track-pointer";
 import { FramePosition, WallGuides } from "./wall-guides";
@@ -14,11 +14,13 @@ export type StageItem = {
   scale: number;
   width: number;
   height: number;
+  locked: boolean;
 };
 
 type Change = { x?: number; y?: number; scale?: number };
 
 // Shows the wall photo at its natural pixel size, scaled to fit, with draggable and resizable pieces on top.
+// Locked pieces stay put until unlocked.
 // With measurements on, it also shows the wall guides, every piece's size in cm and where the selected piece goes.
 export function WallStage({
   image,
@@ -26,6 +28,7 @@ export function WallStage({
   height,
   items,
   onChange,
+  onToggleLock,
   wall,
   showMeasurements,
   onWallChange,
@@ -35,6 +38,7 @@ export function WallStage({
   height: number;
   items: StageItem[];
   onChange: (id: string, change: Change) => void;
+  onToggleLock: (id: string) => void;
   wall: WallSpace;
   showMeasurements: boolean;
   onWallChange: (wall: WallSpace) => void;
@@ -59,7 +63,8 @@ export function WallStage({
   function startDrag(event: ReactPointerEvent, item: StageItem) {
     setSelectedId(item.id);
     setStackOrder((order) => [...order.filter((id) => id !== item.id), item.id]);
-    trackPointer(event, zoom, (dx, dy) => onChange(item.id, { x: item.x + dx, y: item.y + dy }));
+    if (item.locked) event.stopPropagation();
+    else trackPointer(event, zoom, (dx, dy) => onChange(item.id, { x: item.x + dx, y: item.y + dy }));
   }
 
   function startResize(event: ReactPointerEvent, item: StageItem) {
@@ -78,7 +83,7 @@ export function WallStage({
           {items.map((item) => (
             <div
               key={item.id}
-              className="absolute touch-none cursor-grab active:cursor-grabbing"
+              className={`absolute touch-none ${item.locked ? "" : "cursor-grab active:cursor-grabbing"}`}
               style={{
                 left: item.x,
                 top: item.y,
@@ -104,7 +109,21 @@ export function WallStage({
                   {Math.round(item.width / wall.pxPerCm)} × {Math.round(item.height / wall.pxPerCm)} cm
                 </span>
               )}
-              {selectedId === item.id && (
+              {(selectedId === item.id || item.locked) && (
+                <button
+                  aria-label={item.locked ? "Unlock" : "Lock"}
+                  aria-pressed={item.locked}
+                  className={`absolute flex items-center justify-center rounded-full border-white shadow ${
+                    item.locked ? "bg-stone-900 text-white" : "bg-white text-stone-900"
+                  }`}
+                  style={{ width: 26 / zoom, height: 26 / zoom, left: 6 / zoom, top: 6 / zoom, borderWidth: 2 / zoom }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onToggleLock(item.id)}
+                >
+                  <LockIcon open={!item.locked} style={{ width: 14 / zoom, height: 14 / zoom }} />
+                </button>
+              )}
+              {selectedId === item.id && !item.locked && (
                 <div
                   className="absolute rounded-full border-white bg-blue-500 cursor-nwse-resize touch-none"
                   style={{
@@ -124,5 +143,14 @@ export function WallStage({
         </div>
       )}
     </div>
+  );
+}
+
+function LockIcon({ open, style }: { open: boolean; style: CSSProperties }) {
+  return (
+    <svg style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d={open ? "M8 11V7a4 4 0 0 1 7.5-2" : "M8 11V7a4 4 0 0 1 8 0v4"} />
+    </svg>
   );
 }

@@ -18,6 +18,8 @@ export const planStateSchema = z.object({
   layouts: z.record(z.string(), layout),
   saved: z.record(z.string(), z.array(z.object({ id: z.string(), layout, visibleIds: z.array(z.string()) }))),
   hidden: z.array(z.string()),
+  // Pieces New layout leaves where they are.
+  locked: z.array(z.string()).default([]),
   chosenWallId: z.string().nullable(),
 });
 
@@ -26,7 +28,7 @@ export type Placement = z.infer<typeof placement>;
 export type Layout = z.infer<typeof layout>;
 export type SavedLayout = PlanState["saved"][string][number];
 
-export const emptyPlanState: PlanState = { walls: {}, layouts: {}, saved: {}, hidden: [], chosenWallId: null };
+export const emptyPlanState: PlanState = { walls: {}, layouts: {}, saved: {}, hidden: [], locked: [], chosenWallId: null };
 
 // A photo as stored by the server. Analysis and the cleaned wall arrive while it's processed.
 export type StoredPhoto = {

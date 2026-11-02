@@ -104,6 +104,7 @@ export const example: PlanData = {
     },
     saved: {},
     hidden: ["example:5"], // textile
+    locked: [],
     chosenWallId: null,
   },
 };

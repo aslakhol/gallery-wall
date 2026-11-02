@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PhotoAnalysis } from "@/lib/analyze-photo";
 import { boxToPixels, toPixels, unwarp } from "@/lib/geometry";
-import { randomLayout, type WallSpace } from "@/lib/layout";
+import { layoutAround, type WallSpace } from "@/lib/layout";
 import {
   emptyPlanState,
   isProcessing,
@@ -24,6 +24,7 @@ type Piece = Crop & {
   label: string;
   longestCm: number;
   hidden: boolean;
+  locked: boolean;
 };
 
 type Wall = WallSpace & { photo: StoredPhoto };
@@ -110,14 +111,26 @@ function rescaleLayout(layout: Layout, pieces: Piece[], from: Wall, ratio: numbe
   };
 }
 
+// Locked pieces keep their place on this wall; a locked piece that isn't on it yet is arranged like the rest.
 function shuffledLayout(pieces: Piece[], wall: Wall, current: Layout | undefined): Layout {
   const scaleOf = (piece: Piece) => current?.[piece.id]?.scale ?? 1;
-  const positions = randomLayout(
-    pieces.map((piece) => ({ id: piece.id, ...pieceSize(piece, wall, scaleOf(piece)) })),
+  const kept = pieces.flatMap((piece) => {
+    const placement = piece.locked && current?.[piece.id];
+    return placement ? [{ id: piece.id, placement, ...pieceSize(piece, wall, placement.scale) }] : [];
+  });
+  const free = pieces.filter((piece) => !kept.some((k) => k.id === piece.id));
+  const positions = layoutAround(
+    free.map((piece) => ({ id: piece.id, ...pieceSize(piece, wall, scaleOf(piece)) })),
     wall,
+    kept.map(({ placement: { x, y }, width, height }) => ({ left: x, top: y, right: x + width, bottom: y + height })),
   );
-  return Object.fromEntries(pieces.map((piece) => [piece.id, { ...positions[piece.id], scale: scaleOf(piece) }]));
+  return {
+    ...Object.fromEntries(kept.map(({ id, placement }) => [id, placement])),
+    ...Object.fromEntries(free.map((piece) => [piece.id, { ...positions[piece.id], scale: scaleOf(piece) }])),
+  };
 }
+
+const toggled = (ids: string[], id: string) => (ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id]);
 
 const emptyPlan: PlanData = { id: null, photos: [], state: emptyPlanState };
 
@@ -139,6 +152,7 @@ export function Planner({
   const [layouts, setLayouts] = useState(initial.state.layouts);
   const [saved, setSaved] = useState(initial.state.saved);
   const [hidden, setHidden] = useState(initial.state.hidden);
+  const [locked, setLocked] = useState(initial.state.locked);
   const [chosenWallId, setChosenWallId] = useState(initial.state.chosenWallId);
   const [showMeasurements, setShowMeasurements] = useState(false);
   // New layout pulses until it's first pressed, since it's the main thing to do.
@@ -207,7 +221,14 @@ export function Planner({
     if (!photo.analysis || !photoCrops) return [];
     return photo.analysis.art.map((art, i): Piece => {
       const id = pieceId(photo.id, i);
-      return { id, label: art.label, ...photoCrops[i], longestCm: Math.max(art.widthCm, art.heightCm), hidden: hidden.includes(id) };
+      return {
+        id,
+        label: art.label,
+        ...photoCrops[i],
+        longestCm: Math.max(art.widthCm, art.heightCm),
+        hidden: hidden.includes(id),
+        locked: locked.includes(id),
+      };
     });
   });
 
@@ -237,6 +258,7 @@ export function Planner({
     layouts: activeWall ? { ...layouts, [activeWall.photo.id]: layout } : layouts,
     saved,
     hidden,
+    locked,
     chosenWallId,
   };
   const stateJson = JSON.stringify(planState);
@@ -271,8 +293,8 @@ export function Planner({
     setLayouts((all) => ({ ...all, [activeWall.photo.id]: { ...layout, [id]: { ...layout[id], ...change } } }));
   }
 
-  const toggleHidden = (id: string) =>
-    setHidden((all) => (all.includes(id) ? all.filter((other) => other !== id) : [...all, id]));
+  const toggleHidden = (id: string) => setHidden((all) => toggled(all, id));
+  const toggleLocked = (id: string) => setLocked((all) => toggled(all, id));
 
   const savedLayouts = (activeWall && saved[activeWall.photo.id]) ?? [];
 
@@ -461,6 +483,7 @@ export function Planner({
             height={activeWall.photo.height}
             items={stageItems}
             onChange={changePlacement}
+            onToggleLock={toggleLocked}
             wall={activeWall}
             showMeasurements={showMeasurements}
             onWallChange={changeWall}

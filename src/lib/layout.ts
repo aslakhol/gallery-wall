@@ -42,7 +42,7 @@ function tallestInMiddle(row: Item[]) {
 // One to three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
 // centered above the hang-above line that never drops below it, reaches the ceiling or leaves the wall.
 // Positions are top-left corners in wall pixels.
-export function randomLayout(items: Item[], wall: WallSpace): Record<string, Point> {
+function randomLayout(items: Item[], wall: WallSpace): Record<string, Point> {
   if (items.length === 0) return {};
   const { surface, hangAbove, pxPerCm } = wall;
   const gap = (5 + Math.random() * 3) * pxPerCm;
@@ -99,4 +99,38 @@ export function randomLayout(items: Item[], wall: WallSpace): Record<string, Poi
     y += h + gap;
   }
   return positions;
+}
+
+const LOCKED_BLOCK = "locked";
+const ATTEMPTS = 30;
+
+// Like randomLayout, but around locked pieces that stay where they are. The locked pieces join the arrangement
+// as one block, and the arrangement moves so the block lands back in place. Of several tries, the one that
+// strays least outside the hanging area wins.
+export function layoutAround(items: Item[], wall: WallSpace, locked: Box[]): Record<string, Point> {
+  if (locked.length === 0) return randomLayout(items, wall);
+  if (items.length === 0) return {};
+  const block = {
+    left: Math.min(...locked.map((box) => box.left)),
+    top: Math.min(...locked.map((box) => box.top)),
+    right: Math.max(...locked.map((box) => box.right)),
+    bottom: Math.max(...locked.map((box) => box.bottom)),
+  };
+  const blockItem = { id: LOCKED_BLOCK, width: block.right - block.left, height: block.bottom - block.top };
+  const area = hangingArea(wall);
+
+  const overflow = (positions: Record<string, Point>) =>
+    items.reduce((sum, { id, width, height }) => {
+      const { x, y } = positions[id];
+      const outside = [area.left - x, x + width - area.right, area.top - y, y + height - area.bottom];
+      return sum + outside.reduce((total, distance) => total + Math.max(0, distance), 0);
+    }, 0);
+
+  const attempts = Array.from({ length: ATTEMPTS }, () => {
+    const positions = randomLayout([...items, blockItem], wall);
+    const dx = block.left - positions[LOCKED_BLOCK].x;
+    const dy = block.top - positions[LOCKED_BLOCK].y;
+    return Object.fromEntries(items.map(({ id }) => [id, { x: positions[id].x + dx, y: positions[id].y + dy }]));
+  });
+  return attempts.reduce((best, positions) => (overflow(positions) < overflow(best) ? positions : best));
 }
