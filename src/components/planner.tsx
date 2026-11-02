@@ -10,6 +10,7 @@ import {
   type Layout,
   type PlanData,
   type PlanState,
+  type Placeholder,
   type Placement,
   type SavedLayout,
   type StoredPhoto,
@@ -19,8 +20,10 @@ import { WallStage, type StageItem } from "./wall-stage";
 
 type Crop = { url: string; aspect: number };
 
-type Piece = Crop & {
+type Piece = Omit<Crop, "url"> & {
   id: string;
+  // Placeholders have no image.
+  url: string | null;
   label: string;
   longestCm: number;
   hidden: boolean;
@@ -32,6 +35,7 @@ type Wall = WallSpace & { photo: StoredPhoto };
 const MAX_EDGE = 2048;
 const POLL_MS = 2000;
 const SAVE_DELAY_MS = 600;
+const PLACEHOLDER_SIZE = { widthCm: 30, heightCm: 40 };
 
 // Downscale before upload to stay well inside request size limits.
 async function preparePhoto(file: Blob) {
@@ -153,6 +157,7 @@ export function Planner({
   const [saved, setSaved] = useState(initial.state.saved);
   const [hidden, setHidden] = useState(initial.state.hidden);
   const [locked, setLocked] = useState(initial.state.locked);
+  const [placeholders, setPlaceholders] = useState(initial.state.placeholders);
   const [chosenWallId, setChosenWallId] = useState(initial.state.chosenWallId);
   const [showMeasurements, setShowMeasurements] = useState(false);
   // New layout pulses until it's first pressed, since it's the main thing to do.
@@ -216,21 +221,27 @@ export function Planner({
     }
   }, [photos]);
 
-  const pieces = photos.flatMap((photo) => {
-    const photoCrops = crops[photo.id];
-    if (!photo.analysis || !photoCrops) return [];
-    return photo.analysis.art.map((art, i): Piece => {
-      const id = pieceId(photo.id, i);
-      return {
+  const flags = (id: string) => ({ hidden: hidden.includes(id), locked: locked.includes(id) });
+  const pieces = [
+    ...photos.flatMap((photo) => {
+      const photoCrops = crops[photo.id];
+      if (!photo.analysis || !photoCrops) return [];
+      return photo.analysis.art.map((art, i): Piece => {
+        const id = pieceId(photo.id, i);
+        return { id, label: art.label, ...photoCrops[i], longestCm: Math.max(art.widthCm, art.heightCm), ...flags(id) };
+      });
+    }),
+    ...placeholders.map(
+      ({ id, widthCm, heightCm }): Piece => ({
         id,
-        label: art.label,
-        ...photoCrops[i],
-        longestCm: Math.max(art.widthCm, art.heightCm),
-        hidden: hidden.includes(id),
-        locked: locked.includes(id),
-      };
-    });
-  });
+        label: `${widthCm} × ${heightCm} cm`,
+        url: null,
+        aspect: widthCm / heightCm,
+        longestCm: Math.max(widthCm, heightCm),
+        ...flags(id),
+      }),
+    ),
+  ];
 
   const walls = photos.flatMap((photo): Wall[] => {
     const wall = wallEdits[photo.id] ?? (photo.analysis?.wall && wallSpace(photo.analysis.wall, photo.width, photo.height));
@@ -259,6 +270,7 @@ export function Planner({
     saved,
     hidden,
     locked,
+    placeholders,
     chosenWallId,
   };
   const stateJson = JSON.stringify(planState);
@@ -295,6 +307,29 @@ export function Planner({
 
   const toggleHidden = (id: string) => setHidden((all) => toggled(all, id));
   const toggleLocked = (id: string) => setLocked((all) => toggled(all, id));
+
+  // A new placeholder goes centered just above the hang-above line, ready to be moved and sized.
+  function addPlaceholder() {
+    if (!activeWall) return;
+    const { hangAbove, pxPerCm } = activeWall;
+    const id = crypto.randomUUID();
+    const placement = {
+      x: (hangAbove.left + hangAbove.right) / 2 - (PLACEHOLDER_SIZE.widthCm * pxPerCm) / 2,
+      y: hangAbove.top - (20 + PLACEHOLDER_SIZE.heightCm) * pxPerCm,
+      scale: 1,
+    };
+    setPlaceholders((all) => [...all, { id, ...PLACEHOLDER_SIZE }]);
+    setLayouts((all) => ({ ...all, [activeWall.photo.id]: { ...layout, [id]: placement } }));
+  }
+
+  const changePlaceholder = (id: string, size: Partial<Omit<Placeholder, "id">>) =>
+    setPlaceholders((all) => all.map((placeholder) => (placeholder.id === id ? { ...placeholder, ...size } : placeholder)));
+
+  function removePlaceholder(id: string) {
+    setPlaceholders((all) => all.filter((placeholder) => placeholder.id !== id));
+    setHidden((all) => all.filter((other) => other !== id));
+    setLocked((all) => all.filter((other) => other !== id));
+  }
 
   const savedLayouts = (activeWall && saved[activeWall.photo.id]) ?? [];
 
@@ -484,6 +519,7 @@ export function Planner({
             items={stageItems}
             onChange={changePlacement}
             onToggleLock={toggleLocked}
+            onPlaceholderChange={changePlaceholder}
             wall={activeWall}
             showMeasurements={showMeasurements}
             onWallChange={changeWall}
@@ -495,19 +531,48 @@ export function Planner({
         )}
       </section>
 
-      {pieces.length > 0 && (
+      {(pieces.length > 0 || activeWall?.photo.cleanUrl) && (
         <footer className="flex gap-3 overflow-x-auto border-t border-stone-200 bg-white px-4 py-3">
           {pieces.map((piece) => (
-            <button
-              key={piece.id}
-              title={piece.label}
-              onClick={() => toggleHidden(piece.id)}
-              className={`h-16 shrink-0 transition-opacity ${piece.hidden ? "opacity-30 grayscale" : ""}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- generated data URL */}
-              <img src={piece.url} alt={piece.label} className="h-full w-auto rounded-sm shadow" />
-            </button>
+            <div key={piece.id} className="group relative shrink-0">
+              <button
+                title={piece.label}
+                onClick={() => toggleHidden(piece.id)}
+                className={`block h-16 transition-opacity ${piece.hidden ? "opacity-30 grayscale" : ""}`}
+              >
+                {piece.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- generated data URL
+                  <img src={piece.url} alt={piece.label} className="h-full w-auto rounded-sm shadow" />
+                ) : (
+                  <span
+                    className="flex h-full items-center justify-center rounded-sm border-2 border-stone-400 bg-stone-50 text-[10px] font-medium leading-tight text-stone-500 shadow"
+                    style={{ aspectRatio: piece.aspect }}
+                  >
+                    {piece.label}
+                  </span>
+                )}
+              </button>
+              {!piece.url && (
+                <button
+                  aria-label={`Delete ${piece.label} frame`}
+                  onClick={() => removePlaceholder(piece.id)}
+                  className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-stone-900 text-[10px] text-white group-hover:flex"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           ))}
+          {activeWall?.photo.cleanUrl && (
+            <button
+              aria-label="Add frame"
+              title="Add frame"
+              onClick={addPlaceholder}
+              className="flex h-16 w-12 shrink-0 items-center justify-center rounded-sm border-2 border-dashed border-stone-300 text-2xl text-stone-400 hover:border-stone-400 hover:text-stone-600"
+            >
+              +
+            </button>
+          )}
         </footer>
       )}
     </main>
@@ -525,16 +590,15 @@ function LayoutPreview({ wall, image, items }: { wall: Wall; image: string; item
       <div className="absolute left-0 top-0 origin-top-left" style={{ width: wall.photo.width, height: wall.photo.height, transform: `scale(${scale})` }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- stored photo */}
         <img src={image} alt="" className="absolute inset-0 h-full w-full" />
-        {items.map((item) => (
-          // eslint-disable-next-line @next/next/no-img-element -- generated data URL
-          <img
-            key={item.id}
-            src={item.url}
-            alt=""
-            className="absolute"
-            style={{ left: item.x, top: item.y, width: item.width, height: item.height }}
-          />
-        ))}
+        {items.map((item) => {
+          const style = { left: item.x, top: item.y, width: item.width, height: item.height };
+          return item.url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- generated data URL
+            <img key={item.id} src={item.url} alt="" className="absolute" style={style} />
+          ) : (
+            <div key={item.id} className="absolute bg-stone-50" style={style} />
+          );
+        })}
       </div>
     </div>
   );

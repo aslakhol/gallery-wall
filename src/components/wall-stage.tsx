@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { WallSpace } from "@/lib/layout";
+import type { Placeholder } from "@/lib/plan";
 import { trackPointer } from "./track-pointer";
-import { FramePosition, WallGuides } from "./wall-guides";
+import { CmField, FramePosition, WallGuides } from "./wall-guides";
 
 export type StageItem = {
   id: string;
-  url: string;
+  // Placeholders have no image and are sized in cm instead of scaled.
+  url: string | null;
   label: string;
   x: number;
   y: number;
@@ -20,7 +22,7 @@ export type StageItem = {
 type Change = { x?: number; y?: number; scale?: number };
 
 // Shows the wall photo at its natural pixel size, scaled to fit, with draggable and resizable pieces on top.
-// Locked pieces stay put until unlocked.
+// Locked pieces stay put until unlocked. A selected placeholder shows its size in cm, which can be typed or dragged.
 // With measurements on, it also shows the wall guides, every piece's size in cm and where the selected piece goes.
 export function WallStage({
   image,
@@ -29,6 +31,7 @@ export function WallStage({
   items,
   onChange,
   onToggleLock,
+  onPlaceholderChange,
   wall,
   showMeasurements,
   onWallChange,
@@ -39,6 +42,7 @@ export function WallStage({
   items: StageItem[];
   onChange: (id: string, change: Change) => void;
   onToggleLock: (id: string) => void;
+  onPlaceholderChange: (id: string, size: Partial<Omit<Placeholder, "id">>) => void;
   wall: WallSpace;
   showMeasurements: boolean;
   onWallChange: (wall: WallSpace) => void;
@@ -68,8 +72,16 @@ export function WallStage({
   }
 
   function startResize(event: ReactPointerEvent, item: StageItem) {
-    trackPointer(event, zoom, (dx) => onChange(item.id, { scale: Math.max(0.1, item.scale * (1 + dx / item.width)) }));
+    const toCm = (px: number) => Math.max(1, Math.round(px / wall.pxPerCm));
+    trackPointer(event, zoom, (dx, dy) =>
+      item.url
+        ? onChange(item.id, { scale: Math.max(0.1, item.scale * (1 + dx / item.width)) })
+        : onPlaceholderChange(item.id, { widthCm: toCm(item.width + dx), heightCm: toCm(item.height + dy) }),
+    );
   }
+
+  const editingSize = (item: StageItem) => !item.url && selectedId === item.id;
+  const outline = (item: StageItem) => (selectedId === item.id ? `${3 / zoom}px solid #3b82f6` : undefined);
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden" onPointerDown={() => setSelectedId(undefined)}>
@@ -93,15 +105,41 @@ export function WallStage({
               }}
               onPointerDown={(e) => startDrag(e, item)}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- generated data URL */}
-              <img
-                src={item.url}
-                alt={item.label}
-                draggable={false}
-                className="h-full w-full select-none shadow-[2px_6px_12px_rgba(0,0,0,0.35)]"
-                style={{ outline: selectedId === item.id ? `${3 / zoom}px solid #3b82f6` : undefined }}
-              />
-              {showMeasurements && (
+              {item.url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- generated data URL
+                <img
+                  src={item.url}
+                  alt={item.label}
+                  draggable={false}
+                  className="h-full w-full select-none shadow-[2px_6px_12px_rgba(0,0,0,0.35)]"
+                  style={{ outline: outline(item) }}
+                />
+              ) : (
+                <div
+                  className="h-full w-full border-stone-400 bg-stone-50 shadow-[2px_6px_12px_rgba(0,0,0,0.35)]"
+                  style={{ outline: outline(item), borderWidth: 2 / zoom }}
+                />
+              )}
+              {editingSize(item) && (
+                <>
+                  {/* On the edges they measure, like the wall surface's. */}
+                  <CmField
+                    x={item.width / 2}
+                    y={0}
+                    zoom={zoom}
+                    cm={item.width / wall.pxPerCm}
+                    onCommit={(widthCm) => onPlaceholderChange(item.id, { widthCm })}
+                  />
+                  <CmField
+                    x={0}
+                    y={item.height / 2}
+                    zoom={zoom}
+                    cm={item.height / wall.pxPerCm}
+                    onCommit={(heightCm) => onPlaceholderChange(item.id, { heightCm })}
+                  />
+                </>
+              )}
+              {showMeasurements && !editingSize(item) && (
                 <span
                   className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-white/90 font-medium text-stone-900 shadow"
                   style={{ bottom: 6 / zoom, fontSize: 12 / zoom, padding: `${1 / zoom}px ${5 / zoom}px` }}

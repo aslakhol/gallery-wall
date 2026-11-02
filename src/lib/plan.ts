@@ -10,8 +10,10 @@ const wallSpace = z.object({
 }) satisfies z.ZodType<WallSpace>;
 const placement = z.object({ x: z.number(), y: z.number(), scale: z.number().positive() });
 const layout = z.record(z.string(), placement);
+const placeholder = z.object({ id: z.string(), widthCm: z.number().positive(), heightCm: z.number().positive() });
 
-// Everything the user decides, keyed by photo and piece ids. Pieces are `${photoId}:${index}` into the photo's analysis.
+// Everything the user decides, keyed by photo and piece ids. Pieces are `${photoId}:${index}` into the photo's analysis,
+// or a placeholder's id.
 export const planStateSchema = z.object({
   // Corrections to the analyzed walls.
   walls: z.record(z.string(), wallSpace),
@@ -20,6 +22,8 @@ export const planStateSchema = z.object({
   hidden: z.array(z.string()),
   // Pieces New layout leaves where they are.
   locked: z.array(z.string()).default([]),
+  // Frames without a photo, sized by hand.
+  placeholders: z.array(placeholder).default([]),
   chosenWallId: z.string().nullable(),
 });
 
@@ -27,8 +31,9 @@ export type PlanState = z.infer<typeof planStateSchema>;
 export type Placement = z.infer<typeof placement>;
 export type Layout = z.infer<typeof layout>;
 export type SavedLayout = PlanState["saved"][string][number];
+export type Placeholder = z.infer<typeof placeholder>;
 
-export const emptyPlanState: PlanState = { walls: {}, layouts: {}, saved: {}, hidden: [], locked: [], chosenWallId: null };
+export const emptyPlanState: PlanState = { walls: {}, layouts: {}, saved: {}, hidden: [], locked: [], placeholders: [], chosenWallId: null };
 
 // A photo as stored by the server. Analysis and the cleaned wall arrive while it's processed.
 export type StoredPhoto = {

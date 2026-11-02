@@ -90,7 +90,7 @@ export function WallGuides({
 }
 
 // An editable cm length centered on (x, y), sized to stay readable at any zoom.
-function CmField({
+export function CmField({
   label,
   x,
   y,
