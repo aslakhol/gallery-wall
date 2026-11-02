@@ -10,6 +10,16 @@ export type WallSpace = { surface: Box; hangAbove: HangAbove; pxPerCm: number };
 const ABOVE_LINE_CM = 20;
 const BELOW_CEILING_CM = 15;
 
+// Where art may hang: below the ceiling and clear above the hang-above line, within the wall's edges.
+function hangingArea({ surface, hangAbove, pxPerCm }: WallSpace): Box {
+  return {
+    left: surface.left,
+    right: surface.right,
+    top: surface.top + BELOW_CEILING_CM * pxPerCm,
+    bottom: Math.min(surface.bottom, hangAbove.top) - ABOVE_LINE_CM * pxPerCm,
+  };
+}
+
 const pick = <T>(options: readonly T[]) => options[Math.floor(Math.random() * options.length)];
 
 function shuffle<T>(items: T[]) {
@@ -32,13 +42,13 @@ function tallestInMiddle(row: Item[]) {
 // One to three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
 // centered above the hang-above line that never drops below it, reaches the ceiling or leaves the wall.
 // Positions are top-left corners in wall pixels.
-export function randomLayout(items: Item[], { surface, hangAbove, pxPerCm }: WallSpace): Record<string, Point> {
+export function randomLayout(items: Item[], wall: WallSpace): Record<string, Point> {
   if (items.length === 0) return {};
+  const { surface, hangAbove, pxPerCm } = wall;
   const gap = (5 + Math.random() * 3) * pxPerCm;
   const align = pick(["center", "top", "bottom"] as const);
 
-  const top = surface.top + BELOW_CEILING_CM * pxPerCm;
-  const bottom = Math.min(surface.bottom, hangAbove.top) - ABOVE_LINE_CM * pxPerCm;
+  const { top, bottom } = hangingArea(wall);
   const availableHeight = bottom - top;
   const centerX = (hangAbove.left + hangAbove.right) / 2;
   const surfaceWidth = surface.right - surface.left;
