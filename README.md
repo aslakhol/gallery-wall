@@ -4,7 +4,7 @@ Upload photos of a wall and your art. The app finds the art, removes it from the
 
 - `src/lib/analyze-photo.ts` finds the art, its corners and estimated size, and the hang area on the wall.
 - `src/lib/clean-wall.ts` asks an image model for the same photo with the art removed.
-- `src/lib/plans.ts` stores plans. The first upload creates a plan at `/p/<id>`. Photos go to Vercel Blob and are processed on the server after upload; the results land in the `photos` table. Everything the user decides is autosaved as one JSON document in `plans.state`. The server and the browser write to separate tables, so they never overwrite each other.
+- `src/lib/plans.ts` stores plans. The first upload creates a plan at `/p/<id>`. Photos go to Vercel Blob and are processed on the server after upload; the results land in the `photos` table. Everything the user decides is autosaved as one JSON document in `plans.state`. The server and the browser write to separate tables, so they never overwrite each other. Deleting a plan removes its photos, Blob files and state, but keeps the `plans` row for accounting.
 - Everything else (straightening the art, layouts, dragging) runs in the browser. The art is cut out of the photo again on every load rather than stored.
 
 ## Development

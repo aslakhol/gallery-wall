@@ -20,3 +20,6 @@ create table if not exists photos (
 );
 
 create index if not exists photos_plan_id_created_at on photos (plan_id, created_at);
+
+-- Deleting a plan removes its photos and state but keeps the row for accounting.
+alter table plans add column if not exists deleted_at timestamptz;

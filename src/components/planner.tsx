@@ -14,6 +14,7 @@ import {
   type SavedLayout,
   type StoredPhoto,
 } from "@/lib/plan";
+import { DeletePlan } from "./delete-plan";
 import { WallStage, type StageItem } from "./wall-stage";
 
 type Crop = { url: string; aspect: number };
@@ -428,6 +429,7 @@ export function Planner({
             Add photos
           </button>
         )}
+        {!demo && planId && <DeletePlan planId={planId} />}
         <button
           aria-pressed={showMeasurements}
           className={`shrink-0 rounded-full border px-4 py-2 text-sm font-medium disabled:opacity-40 ${

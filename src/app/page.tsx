@@ -119,7 +119,7 @@ const faqs = [
   },
   {
     q: "What happens to my photos?",
-    a: "They're kept with your plan so you can come back to it on any device. Only people with your plan's link can see it.",
+    a: "They're kept with your plan so you can come back to it on any device. Only people with your plan's link can see it, and deleting the plan deletes them.",
   },
 ];
 
