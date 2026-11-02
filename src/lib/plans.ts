@@ -25,7 +25,13 @@ export async function createPlan() {
 export async function getPlan(id: string): Promise<PlanData | null> {
   const [[plan], photos] = await Promise.all([
     sql`select state from plans where id = ${id}`,
-    sql`select id, url, width, height, analysis, clean_url, failed from photos where plan_id = ${id} order by created_at`,
+    // Processing that never finished (the function timed out or crashed) counts as failed once it can no longer finish,
+    // after the photos route's maxDuration.
+    sql`
+      select id, url, width, height, analysis, clean_url,
+        failed or ((analysis is null or clean_url is null) and created_at < now() - interval '3 minutes') as failed
+      from photos where plan_id = ${id} order by created_at
+    `,
   ]);
   if (!plan) return null;
   return { id, state: planStateSchema.parse(plan.state), photos: (photos as PhotoRow[]).map(toPhoto) };
