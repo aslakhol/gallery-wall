@@ -29,7 +29,7 @@ function tallestInMiddle(row: Item[]) {
   return result;
 }
 
-// Two or three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
+// One to three rows of pieces with an even gap and a shared vertical alignment per row: a wide, low cluster
 // centered above the hang-above line that never drops below it, reaches the ceiling or leaves the wall.
 // Positions are top-left corners in wall pixels.
 export function randomLayout(items: Item[], { surface, hangAbove, pxPerCm }: WallSpace): Record<string, Point> {
@@ -56,15 +56,13 @@ export function randomLayout(items: Item[], { surface, hangAbove, pxPerCm }: Wal
   const arrangements = Array.from({ length: items.length }, (_, i) => balancedRows(i + 1));
   const widthOverflow = (rows: Item[][]) => Math.max(...rows.map(rowWidth)) / surfaceWidth - 1;
   const heightOverflow = (rows: Item[][]) => clusterHeight(rows) / Math.max(availableHeight, 1) - 1;
-  // Pick between the two fewest row counts (from two rows up) that fit on the wall,
+  // Pick between the three fewest row counts that fit on the wall, so a single wide row is one of the options,
   // or the closest fit when none do.
-  const fitting = arrangements.filter(
-    (rows) => rows.length >= Math.min(2, items.length) && widthOverflow(rows) <= 0 && heightOverflow(rows) <= 0,
-  );
+  const fitting = arrangements.filter((rows) => widthOverflow(rows) <= 0 && heightOverflow(rows) <= 0);
   const misfit = (rows: Item[][]) => Math.max(0, widthOverflow(rows)) + Math.max(0, heightOverflow(rows));
   const chosen =
     fitting.length > 0
-      ? pick(fitting.slice(0, 2))
+      ? pick(fitting.slice(0, 3))
       : arrangements.reduce((best, rows) => (misfit(rows) < misfit(best) ? rows : best));
   const rows = chosen.map((row) => (Math.random() < 0.5 ? tallestInMiddle(row) : shuffle(row)));
 
