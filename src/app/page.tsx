@@ -62,7 +62,7 @@ function Logo() {
         <span className="h-2 w-3 rounded-[2px] bg-[#c2683f]" />
         <span className="h-3 w-2 rounded-[2px] bg-stone-900" />
       </span>
-      <span className="font-serif text-2xl leading-none">Gallery Wall</span>
+      <span className="font-serif text-2xl leading-none">Your Gallery Wall</span>
     </Link>
   );
 }
@@ -288,7 +288,7 @@ export default function Landing() {
 
       <footer className="mx-auto flex max-w-6xl items-center justify-between px-6 pb-10 text-sm text-stone-500">
         <Logo />
-        <span>© Gallery Wall</span>
+        <span>© Your Gallery Wall</span>
       </footer>
     </div>
   );

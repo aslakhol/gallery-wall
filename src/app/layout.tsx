@@ -15,7 +15,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Gallery Wall — plan your gallery wall from one photo",
+  title: "Your Gallery Wall — plan your gallery wall from one photo",
   description:
     "Upload a photo of your wall and your art. See layouts at real size in seconds, before you drill a single hole.",
 };
